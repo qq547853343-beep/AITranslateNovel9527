@@ -4,7 +4,7 @@
 
 - 项目版本：`ver0.1`
 - 文档性质：功能设计与实施规划
-- 当前状态：需求总结，尚未实施
+- 当前状态：ver0.1 已实现，待用户验收与提交
 - 运行方式：Windows 本地服务
 - 默认地址：`http://127.0.0.1:6501`
 - AI 服务：DeepSeek Chat API
@@ -161,7 +161,7 @@
 → 用户确认后保存
 ```
 
-AI 可以返回新增、修改、停用、删除和创建规则集等候选操作，但不能直接修改本地规则文件。规则集的重命名、复制和删除优先通过明确的本地界面完成。
+AI 可以返回新增、修改、停用和删除规则等候选操作，但不能直接修改本地规则文件。规则集的新建、重命名、复制和删除通过明确的本地界面完成。
 
 ## 7. 规则本地筛选
 
@@ -562,14 +562,15 @@ data/
 ├─ app.db
 ├─ app.db-wal
 ├─ app.db-shm
+├─ .master-key
 └─ assets/
 ```
 
 这些文件继续由 `.gitignore` 中的 `data/` 规则排除，不上传到 GitHub。
 
-本地数据库建议：
+本地数据库实现：
 
-- 使用 `better-sqlite3` 作为 Node.js SQLite 驱动，并在实施前确认目标 Windows 环境兼容性。
+- 使用 Node.js 24 内置的 `node:sqlite` 驱动，避免额外数据库服务和原生扩展安装。
 - 启用 WAL 模式以改善读写并发。
 - 启用外键约束。
 - 设置合理的 `busy_timeout`。
@@ -617,7 +618,7 @@ API Key 通过统一的 `SecretStore` 接口管理：
 
 ```text
 SecretStore
-├─ DpapiSecretStore：Windows 本地版
+├─ AesGcmSecretStore：本地版
 ├─ KmsSecretStore：未来云端版
 └─ MemorySecretStore：自动化测试
 ```
@@ -637,35 +638,40 @@ class SecretStore {
 
 ```text
 API Key
-→ Windows DPAPI 绑定当前 Windows 用户进行保护
-→ 仅将密文和版本信息保存到 SQLite
+→ 由独立随机主密钥使用 AES-256-GCM 加密
+→ 将密文、随机 IV、认证标签和版本信息保存到 SQLite
+→ 将 32 字节主密钥单独保存在 data/.master-key
 → 使用时在内存中短暂解密
 ```
 
-SQLite 中不保存独立的明文主密钥。密钥记录采用可迁移的版本化格式：
+此方案不依赖 Windows 用户账户，适合轻量本地使用。SQLite 不保存主密钥，但数据库与 `.master-key` 必须分开保护：同时取得两者的人可以解密 API Key。密钥记录采用可迁移的版本化格式：
 
 ```json
 {
   "scopeId": "local-user",
   "secretName": "deepseek-api-key",
-  "provider": "windows-dpapi",
+  "provider": "local-aes-256-gcm",
   "formatVersion": 1,
   "ciphertext": "...",
-  "metadata": {},
+  "metadata": {
+    "iv": "...",
+    "authTag": "...",
+    "aadVersion": 1
+  },
   "createdAt": "...",
   "updatedAt": "..."
 }
 ```
 
-现有 MVP 使用 `.master-key` 和 AES-256-GCM。升级到 `ver0.1` 时需要提供一次性兼容迁移：
+现有 MVP 使用 `.master-key` 和 AES-256-GCM。升级到 `ver0.1` 时进行一次性兼容迁移：
 
 ```text
 检测旧 secrets.json 和 .master-key
 → 使用现有逻辑解密
-→ 通过 DpapiSecretStore 重新加密
+→ 通过 AesGcmSecretStore 使用同一主密钥重新加密
 → 在事务中写入 SQLite
 → 重新读取并验证
-→ 迁移成功后再清理旧密钥文件
+→ 迁移成功后清理旧 secrets.json，保留 .master-key
 ```
 
 迁移失败时继续保留旧文件并给出明确错误，不能导致用户密钥丢失。
@@ -718,7 +724,7 @@ PostgreSQL
 
 为保证未来可以扩展为云服务，`ver0.1` 开始遵循：
 
-- 不在业务层直接调用 DPAPI、SQLite 或具体 KMS SDK。
+- 不在业务层直接调用 AES、SQLite 或具体 KMS SDK。
 - 不在业务层直接拼写 SQL。
 - 所有数据记录使用稳定 UUID，而不是依赖本地文件名。
 - 所有持久化记录包含创建时间、更新时间和结构版本。
@@ -729,11 +735,11 @@ PostgreSQL
 
 ## 20. 安全要求
 
-- MVP 继续兼容现有 AES-256-GCM 密钥文件，`ver0.1` 目标方案为 SQLite 密文记录加 Windows DPAPI。
+- MVP 继续兼容现有 AES-256-GCM 密钥文件，`ver0.1` 使用独立本地主密钥加密 SQLite 密钥记录。
 - API Key 不写入日志、规则集、任务记录和导出文件。
-- SQLite 不保存明文 API Key 或明文主密钥。
+- SQLite 不保存明文 API Key 或主密钥；主密钥单独保存在被 Git 忽略的 `data/.master-key`。
 - 解密后的 API Key 仅在请求期间短暂保存在内存中。
-- 本地 `SecretStore` 将凭据绑定当前 Windows 用户。
+- 本地 `SecretStore` 不绑定 Windows 用户；复制本地数据时必须同时保护数据库和主密钥文件。
 - 云端 `SecretStore` 使用 KMS 或 Secret Manager，并支持密钥轮换和访问审计。
 - 新增规则修改接口仅允许本机页面调用。
 - 对规则数量、字段长度、请求体大小和任务数量设置限制。
@@ -757,7 +763,7 @@ lib/
 ├─ export-bundle.js
 ├─ secrets/
 │  ├─ secret-store.js
-│  ├─ dpapi-secret-store.js
+│  ├─ aes-gcm-secret-store.js
 │  ├─ kms-secret-store.js
 │  └─ memory-secret-store.js
 └─ storage/
@@ -775,7 +781,7 @@ lib/
 存储和密钥提供者通过启动配置注入：
 
 ```text
-本地默认：SQLite + DpapiSecretStore
+本地默认：SQLite + AesGcmSecretStore
 自动化测试：临时 SQLite + MemorySecretStore
 未来云端：PostgreSQL + KmsSecretStore
 ```
@@ -785,7 +791,7 @@ lib/
 1. 为现有翻译、图片和导出能力增加基础回归测试。
 2. 建立 Repository、SecretStore 和模型提供者接口。
 3. 引入 SQLite、数据库迁移机制和本地 Repository 实现。
-4. 实现 DpapiSecretStore 及现有 AES 密钥文件的安全迁移。
+4. 实现 AesGcmSecretStore 及现有 AES 密钥文件的安全迁移。
 5. 拆分 DeepSeek 调用和文本分段模块，但保持原接口行为。
 6. 实现规则集的新建、重命名、编辑、复制、删除和恢复。
 7. 增加右侧规则集界面。

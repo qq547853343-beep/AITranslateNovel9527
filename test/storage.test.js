@@ -1,0 +1,37 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { openDatabase } from '../lib/database.js';
+import { RuleSetRepository, SettingsRepository, TranslationJobRepository } from '../lib/repositories.js';
+
+test('SQLite repositories create, update, copy and recover data', () => {
+  const database = openDatabase(':memory:');
+  const settings = new SettingsRepository(database);
+  const rules = new RuleSetRepository(database);
+  const jobs = new TranslationJobRepository(database);
+  settings.set('ui', { validationMode: 'warning' });
+  assert.equal(settings.get('ui').validationMode, 'warning');
+  const set = rules.create({ name: '小说A', priority: 10 });
+  const rule = rules.addRule(set.id, { source: '聖女', target: '圣女', category: '称号' });
+  assert.equal(rules.getById(set.id).rules[0].target, '圣女');
+  rules.updateRule(set.id, rule.id, { target: '圣女大人' });
+  assert.equal(rules.getById(set.id).rules[0].target, '圣女大人');
+  const history = rules.listVersions(set.id);
+  assert.equal(history[0].ruleCount, 1);
+  const originalVersion = history.find((item) => item.ruleCount === 1 && item.version < history[0].version).version;
+  rules.restoreVersion(set.id, originalVersion);
+  assert.equal(rules.getById(set.id).rules[0].target, '圣女');
+  const imported = rules.import({ name: '导入集', rules: [{ source: '王都', target: '王都', type: 'place' }] });
+  assert.equal(imported.rules[0].type, 'place');
+  assert.equal(rules.export(imported.id).ruleSet.rules[0].source, '王都');
+  const atomic = rules.create({ name: '事务测试' });
+  assert.throws(() => rules.applyOperations(atomic.id, [{ action: 'add', source: '勇者', target: '勇者' }, { action: 'add', source: '勇者', target: '英雄' }]), /冲突/);
+  assert.equal(rules.getById(atomic.id).rules.length, 0, '冲突时整批候选规则必须回滚');
+  const copy = rules.copy(set.id, '小说A副本');
+  assert.equal(copy.rules.length, 1);
+  rules.softDelete(copy.id);
+  assert.equal(rules.getById(copy.id), null);
+  assert.equal(rules.restore(copy.id).deletedAt, null);
+  const job = jobs.create({ title: '第一章', sourceBlocks: [{ kind: 'text', text: '原文' }], segments: [{ id: 'b0p0', status: 'pending' }] });
+  assert.equal(jobs.getById(job.id).segments.length, 1);
+  database.close();
+});
