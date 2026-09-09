@@ -1,0 +1,15 @@
+{
+  "name": "ai-word-translate-service-9527",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "node server.js", "dev": "node --watch server.js" },
+  "dependencies": {
+    "docx": "^9.5.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "jszip": "^3.10.1",
+    "multer": "^2.3.0",
+    "vue": "^3.5.21"
+  }
+}
