@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell, Tray } from 'electron';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { openDatabase } from '../lib/database.js';
 import { SettingsRepository } from '../lib/repositories.js';
 import { LAUNCHER_MANAGEMENT_PORT, LauncherSettingsStore } from './launcher-settings.js';
@@ -25,6 +25,7 @@ let management = null;
 let managementError = '';
 let quitting = false;
 let quitPromise = null;
+let trustedManagerFileUrl = '';
 
 function showWindow() {
   if (!mainWindow) return;
@@ -94,8 +95,8 @@ function createWindow(appRoot) {
   mainWindow = new BrowserWindow({
     width: 1120,
     height: 760,
-    minWidth: 760,
-    minHeight: 560,
+    minWidth: 560,
+    minHeight: 480,
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#0e1420',
@@ -109,11 +110,13 @@ function createWindow(appRoot) {
       spellcheck: false
     }
   });
-  if (managementError) mainWindow.loadFile(path.join(appRoot, 'public', 'manager.html'));
+  const managerFile = path.join(appRoot, 'public', 'manager.html');
+  trustedManagerFileUrl = pathToFileURL(managerFile).href;
+  if (managementError) mainWindow.loadFile(managerFile);
   else mainWindow.loadURL(`http://127.0.0.1:${LAUNCHER_MANAGEMENT_PORT}/`);
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    const allowed = url === `http://127.0.0.1:${LAUNCHER_MANAGEMENT_PORT}/` || url.startsWith('file:');
+    const allowed = url === `http://127.0.0.1:${LAUNCHER_MANAGEMENT_PORT}/` || url === trustedManagerFileUrl;
     if (!allowed) event.preventDefault();
   });
   mainWindow.on('close', (event) => {
@@ -198,7 +201,7 @@ function assertTrustedRenderer(event) {
   const source = event.senderFrame?.url || event.sender?.getURL?.() || '';
   const trustedOrigin = `http://127.0.0.1:${LAUNCHER_MANAGEMENT_PORT}`;
   const trustedHttp = source === `${trustedOrigin}/` || source === `${trustedOrigin}/manager.html`;
-  const trustedFile = source.startsWith('file:') && source.replace(/\\/g, '/').endsWith('/public/manager.html');
+  const trustedFile = Boolean(trustedManagerFileUrl) && source === trustedManagerFileUrl;
   if (!trustedHttp && !trustedFile) throw new Error('已拒绝来自非启动器页面的 IPC 请求。');
 }
 

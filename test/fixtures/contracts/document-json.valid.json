@@ -1,0 +1,1 @@
+{"schemaVersion":1,"title":"网页章节样例","language":"zh-CN","sourceUrl":"https://example.com/chapter/1","blocks":[{"id":"heading-1","kind":"text","tag":"h1","text":"第一章"},{"id":"paragraph-1","kind":"text","tag":"p","text":"正文内容。"},{"id":"image-1","kind":"image","assetPath":"assets/illustration.png","alt":"插图","width":800,"height":600}],"metadata":{"author":"测试作者"}}

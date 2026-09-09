@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>保存网页选区</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <h1>保存网页选区</h1>
+    <p>先在网页中选择需要的文字和图片，再点击下方按钮。图片按实际 PNG、JPEG、GIF 或 WebP 字节原样写入 ZIP，不重新编码。</p>
+    <button id="save" type="button">保存为网页 ZIP</button>
+    <div id="status" role="status" aria-live="polite">等待选择内容</div>
+    <details>
+      <summary>权限和格式说明</summary>
+      <p>扩展需要读取当前标签页，并从图片原地址下载资源。不会读取 API Key，也不会向翻译服务或其他服务器上传选区。</p>
+    </details>
+  </main>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

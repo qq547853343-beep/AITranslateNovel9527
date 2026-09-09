@@ -4,13 +4,13 @@
 
 - 项目版本：`ver0.2`
 - 文档性质：功能设计、实施结果与维护基线
-- 当前状态：ver0.1 翻译工作流与 ver0.2 Electron Windows 启动器均已实现
+- 当前状态：ver0.1 翻译工作流、ver0.2 Electron Windows 启动器、标准化网页 ZIP 导入、网页选区导出扩展与渐进式模块化均已实现
 - 运行方式：Windows Electron 桌面启动器；同时保留 Node.js 开发入口
 - 启动器管理地址：`http://127.0.0.1:7000`
 - 翻译服务默认地址：`http://127.0.0.1:6501`
 - AI 服务：DeepSeek Chat API
 
-本文档第 1 至 24 节记录 ver0.1 翻译业务设计，第 25 节记录 ver0.2 新增的 Electron 启动器。ver0.2 是增量桌面化版本，不改变大型文档翻译范围，也不重写既有翻译业务。
+本文档第 1 至 24 节记录 ver0.1 翻译业务设计，第 25 节记录 ver0.2 Electron 启动器，第 26 至 28 节记录标准化网页 ZIP 导入、模块边界和任务并发增强，第 29 节记录网页选区导出扩展。ver0.2 保持增量演进，不把大型文档 Worker Pool 当作已实现功能。
 
 ## 1. 项目目标
 
@@ -947,9 +947,60 @@ BrowserWindow 启用 `contextIsolation`、禁用渲染进程 Node.js、启用沙
 
 ### 25.7 ver0.2 验证基线
 
-- Node.js 测试共 28 项，覆盖既有翻译业务和启动器核心逻辑。
+- Node.js 测试共 64 项，覆盖既有翻译业务、启动器、迁移、AI adapter、并发保护、剪贴板网页、ZIP 导入和浏览器扩展原格式图片打包。
 - 覆盖设置持久化、操作锁、全局锁、端口检测、日志脱敏与轮转、服务生命周期、端口切换回滚、异常重启上限和健康身份校验。
 - Windows 解包版已实际启动 `server.js` 子进程并取得带实例 ID 的健康响应。
 - 使用不同用户数据目录重复启动时，第二个启动进程退出，进程数量不增加。
-- 管理页面已检查 1120×760、760×560 和 390×844 三种尺寸，没有横向溢出。
+- 管理页面已有 1120×760、窄窗口和移动断点；Electron 最小窗口已降为 560×480，以便窄屏布局可实际生效。
 - Windows x64 NSIS 安装包构建成功；当前未配置代码签名和正式产品图标。
+
+## 26. 标准化网页 ZIP 导入
+
+标准包固定包含 `manifest.json`、`document.json`、`content.html` 与 `assets/`。`document.json` 是唯一规范内容来源；`content.html` 只验证存在与大小，不进入 DOM，也不能覆盖规范内容。当前允许 PNG/JPEG/GIF/WebP，按魔数验证并保持原字节；SVG 明确拒绝。
+
+导入由 `WebPackageReader → ImportWebPackage → StagedAssetStore` 完成：先限制压缩包、文件数量、单文件、展开总量和压缩比，再校验安全路径、manifest、内容块与资源引用；所有资源先写入会话临时目录，完整文档模型校验通过后再提交。任何错误都会删除临时文件和本次已提交文件。
+
+新增接口：
+
+```text
+POST /api/import/web-package
+multipart 字段：package
+```
+
+成功返回 `manifest`、统一 `Document`、本地资源映射和预览来源。失败返回稳定的 `WEB_PACKAGE_*` 错误码。ZIP 导入当前只创建可预览、可翻译的临时资源，不新增文档持久化表，因此没有为它增加数据库迁移。完整格式见 `WEB_CONTENT_ZIP_FORMAT.md`。
+
+## 27. 渐进式模块边界
+
+当前新增边界如下：
+
+```text
+server.js / lib/application.js  组合依赖与 HTTP 映射
+lib/application/               翻译兼容、规则候选、ZIP 导入用例
+lib/domain/                    Document、ZIP 合同和任务状态机
+lib/infrastructure/            ZIP、资源暂存、图片识别和导出器
+lib/ai/                        Prompt、响应解析与外部错误映射
+lib/migrations/                递增且带校验和的 SQLite 迁移
+electron/                      进程、端口、日志、托盘与安全 IPC
+public/                        Vue 界面、浏览器 API client、剪贴板读取
+browser-extension/              Chrome/Edge 选区读取、图片下载与标准 ZIP 生成
+```
+
+DeepSeek 是 `TranslationProvider` / `RuleProposalProvider` 的具体实现。旧 `/api/translate` 保留原请求和响应格式，但已通过兼容 Application 用例调用 Provider。规则候选仍须用户确认后才写入。
+
+## 28. SQLite 迁移与翻译任务并发
+
+迁移继续使用 `node:sqlite`、`BEGIN IMMEDIATE`、WAL、外键和 busy timeout。迁移已拆到 `lib/migrations/`；每项有递增版本、名称和 SHA-256 校验和。启动时校验迁移历史与关键 schema，失败会回滚并关闭数据库。
+
+第 3 号迁移为翻译任务增加 `revision`、`worker_id`、`lease_until`、`last_heartbeat_at`、`last_error` 和 `recovery_reason`。Repository 使用 revision CAS，worker 必须持有有效租约；心跳续租不改变业务 revision。旧 worker 的迟到 AI 返回在写入前会重新核对 worker、状态和 revision，不能覆盖取消、重试或新 worker 的状态。已完成任务保持终态；“全部重译”创建新任务，避免覆盖旧完成结果。
+
+这不是大型文档 Worker Pool：当前仍为单任务内顺序翻译，只增强现有任务的恢复与竞态防护。
+
+## 29. Chrome/Edge 网页选区导出扩展
+
+`browser-extension/` 是独立的 Manifest V3 扩展，不在渲染进程中引入 Node.js，也不向网页暴露任意命令能力。用户点击扩展后，它仅对当前 HTTP/HTTPS 标签页临时注入选区读取函数，提取受支持的标题、段落、列表、引用与 `<img>`，按原出现顺序构造 `ContentBlock`。
+
+扩展使用跨域主机权限重新下载图片，但明确使用 `credentials: omit`，不发送 Cookie 或 Authorization。实际响应字节由魔数识别为 PNG、JPEG、GIF 或 WebP；字节不经 Canvas、不转码，以原格式写入 STORE ZIP 条目。相同 URL 只下载一次，多个图片块可复用同一资源。
+
+生成包严格包含 `manifest.json`、`document.json`、`content.html` 和已引用的 `assets/`。`document.json` 仍是规范来源，`content.html` 由已转义的模型重新生成。单图、总包、块数和字符数沿用导入合同上限；任一图片失败时构建整体失败，不下载半成品 ZIP。
+
+出于主动内容与隐私边界，扩展不保留 SVG、CSS 背景图、视频、`blob:` URL 或要求登录态/防盗链的图片。WebP 可在应用内显示及导出 EPUB，但当前 DOCX 依赖不支持 WebP，导出 Word 前需转换为 PNG/JPEG。

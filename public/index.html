@@ -21,7 +21,7 @@
         <div class="toolbar">
           <label class="field"><span>目标语言</span><select v-model="targetLanguage"><option>中文</option><option>English</option><option>日本語</option><option>한국어</option><option>Français</option><option>Deutsch</option><option>Español</option></select></label>
           <label class="field wide"><span>文档名称</span><input v-model="documentTitle" maxlength="100" placeholder="translation"></label>
-          <label class="file-picker"><input type="file" accept=".txt,.md,.csv,.json,.html" @change="onFile"><span>{{fileName||'导入文字文件'}}</span></label>
+          <label class="file-picker"><input type="file" accept=".txt,.md,.csv,.json,.html,.zip,application/zip" @change="onFile"><span>{{fileName||'导入文字或网页 ZIP'}}</span></label>
         </div>
 
         <div class="stats">
@@ -29,7 +29,7 @@
         </div>
 
         <div class="editor-block">
-          <div class="editor-title"><h3>原文与图片</h3><small>支持粘贴图文及拖入 PNG/JPEG/WebP</small></div>
+          <div class="editor-title"><h3>原文与图片</h3><div class="editor-title-actions"><small>支持粘贴图文及拖入 PNG/JPEG/GIF/WebP</small><button class="clipboard-button" type="button" @click="readClipboardHtml" :disabled="readingClipboard||isWorking">{{readingClipboard?'正在读取…':'读取剪贴板网页'}}</button></div></div>
           <div ref="sourceEditor" class="rich-editor" contenteditable="true" data-placeholder="输入文字，或把包含图片的内容粘贴到这里……" @input="updateSourceStats" @paste="onPaste" @dragover.prevent="dragging=true" @dragleave="dragging=false" @drop="onDrop" :class="{dragging}"></div>
         </div>
 
@@ -99,6 +99,8 @@
 
   <div v-if="bundleOpen" class="modal-backdrop" @click.self="bundleOpen=false"><section class="modal"><div class="modal-head"><h2>输出翻译资料</h2><button @click="bundleOpen=false">×</button></div><label class="check"><input type="checkbox" v-model="bundleOptions.translation"> 最终译文</label><label class="check"><input type="checkbox" v-model="bundleOptions.source"> 原文</label><label class="check"><input type="checkbox" v-model="bundleOptions.glossary"> 本次术语表</label><label class="check"><input type="checkbox" v-model="bundleOptions.notes"> 翻译说明</label><label class="check"><input type="checkbox" v-model="bundleOptions.analysis"> 翻译决策摘要</label><label class="check"><input type="checkbox" v-model="bundleOptions.rules"> 本次使用的规则</label><label class="check"><input type="checkbox" v-model="bundleOptions.manifest"> 翻译信息</label><p class="security-note">支持的浏览器会让你选择目录，并把文件输出到同一个新文件夹；其他浏览器自动输出 ZIP。</p><button class="btn primary full" @click="exportBundle">选择目录并输出</button></section></div>
 </div>
+  <script src="/api-client.js"></script>
+  <script src="/clipboard-reader.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

@@ -1,0 +1,1 @@
+{"id":"job-fixture-1","revision":0,"status":"pending","workerId":null,"leaseUntil":null,"lastHeartbeatAt":null,"lastError":"","recoveryReason":"","segments":[{"id":"b0p0","status":"pending","attempts":0,"requestId":null,"startedAt":null,"finishedAt":null,"lastError":"","translatedText":"","issues":[]}]}

@@ -14,6 +14,7 @@
     "launcher": "electron . --show",
     "launcher:dev": "electron . --show",
     "test": "node --test",
+    "extension:pack": "node scripts/package-browser-extension.js",
     "pack:win": "electron-builder --win dir --publish never",
     "dist:win": "electron-builder --win nsis --publish never"
   },

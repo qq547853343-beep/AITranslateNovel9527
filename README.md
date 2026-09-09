@@ -1,6 +1,6 @@
 # AITranslateNovel9527
 
-本地 Windows AI 图文翻译服务，当前版本 `ver0.2`。使用 DeepSeek Chat API，支持独立规则集、自然语言生成候选规则、长文本分段、上下文连续翻译、中断恢复、术语校验、TXT/DOCX/EPUB 导出，以及负责本地服务生命周期的 Electron 桌面启动器。
+本地 Windows AI 图文翻译服务，当前版本 `ver0.2`。使用 DeepSeek Chat API，支持独立规则集、自然语言生成候选规则、长文本分段、上下文连续翻译、中断恢复、术语校验、标准化网页 ZIP 导入、网页选区 ZIP 导出扩展、TXT/DOCX/EPUB 导出，以及负责本地服务生命周期的 Electron 桌面启动器。
 
 ## 版本说明
 
@@ -15,6 +15,11 @@
 - 新增安全 preload/IPC 白名单；渲染进程不直接访问 Node.js、文件、进程或任意命令。
 - 新增 electron-builder Windows x64 解包版和 NSIS 安装包配置。
 - 自动更新仅预留接口和状态，不执行下载、安装、替换或回滚。
+- 原文编辑区可主动读取剪贴板网页 `text/html`；其中的远程 PNG/JPEG/GIF/WebP 图片经地址、重定向、大小和类型校验后转存为本地资源，不携带 Cookie 或授权信息。
+- 新增标准化网页 ZIP 导入：以 `document.json` 为唯一内容来源，安全校验 `manifest.json`、文件路径、压缩比、展开大小和图片引用，失败时清理全部临时资源。
+- 新增 Chrome/Edge 网页选区导出扩展：保持文字与图片顺序，按真实格式原样保存 PNG/JPEG/GIF/WebP，并生成可直接导入本服务的标准 ZIP。
+- SQLite 迁移拆分为不可变、带名称和 SHA-256 校验和的递增迁移；翻译任务增加 revision、worker 租约、心跳和迟到写回保护。
+- DeepSeek 调用拆分为 Provider、提示词构造、响应解析和错误映射；旧 `/api/translate` 通过兼容用例进入 Provider，不再由路由直接请求 AI。
 
 ### ver0.1
 
@@ -55,12 +60,24 @@ pnpm dist:win
 
 当前安装包未配置代码签名和产品图标，Windows 可能显示未知发布者提示；这不影响本地功能。
 
+## 网页选区导出扩展
+
+开发安装：在 Chrome 的 `chrome://extensions/` 或 Edge 的 `edge://extensions/` 开启开发者模式，选择“加载已解压的扩展”，并指向 `browser-extension/`。在普通网页中选中文字和图片后，点击扩展按钮即可保存标准 ZIP。
+
+生成便于分发的扩展压缩包：
+
+```powershell
+pnpm extension:pack
+```
+
+产物位于 `dist/AITranslateNovel9527-browser-extension-0.2.0.zip`。解压后可按上述方式加载。详细权限、安全边界和限制见 [browser-extension/README.md](browser-extension/README.md)。
+
 ## 基本流程
 
 1. 在“连接设置”中保存 DeepSeek API Key。
 2. 新建或选择一个或多个独立规则集。
 3. 在右侧输入自然语言规则并点击“解析规则”。AI 只生成候选操作；检查预览并点击“确认保存”后才写入规则集。
-4. 在左侧输入或导入原文，然后开始翻译。
+4. 在左侧输入原文、读取剪贴板网页、导入普通文本文件或标准化网页 ZIP，然后开始翻译。
 5. 完成后复制译文，导出 TXT、Word、EPUB，或把译文与术语表、原文、说明、分析和规则输出到同一文件夹。
 
 ## 本地数据与密钥
@@ -70,6 +87,7 @@ pnpm dist:win
 - `data/` 已被 Git 忽略。不要同时泄露 `app.db` 与 `.master-key`；同时获得二者的人可以解密 API Key。
 - 迁移或备份本地数据时，请先停止服务，再整体复制 `data/`。若只复制数据库而不复制主密钥，需要重新填写 API Key。
 - 临时翻译任务默认保留 7 天，过期后启动服务时自动清理。
+- `schema_migrations` 记录迁移版本、名称和校验和；已应用迁移内容被修改时服务会拒绝进入不完整状态。
 
 未来云端部署可将 SQLite Repository 替换为 PostgreSQL，并将本地 `SecretStore` 替换为 KMS/Secret Manager 实现，不需要改写核心翻译流程。
 
@@ -79,4 +97,4 @@ pnpm dist:win
 pnpm test
 ```
 
-详细设计见 [PROJECT_DOCUMENT.md](PROJECT_DOCUMENT.md)，Electron 启动器需求与实现状态见 [ELECTRON_LAUNCHER_REQUIREMENTS.md](ELECTRON_LAUNCHER_REQUIREMENTS.md)。
+当前自动化基线为 64 项测试。标准网页包格式见 [WEB_CONTENT_ZIP_FORMAT.md](WEB_CONTENT_ZIP_FORMAT.md)，详细设计见 [PROJECT_DOCUMENT.md](PROJECT_DOCUMENT.md)，Electron 启动器需求与实现状态见 [ELECTRON_LAUNCHER_REQUIREMENTS.md](ELECTRON_LAUNCHER_REQUIREMENTS.md)。
