@@ -1,13 +1,21 @@
 {
   "name": "ai-word-translate-service-9527",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24.0.0" },
+  "main": "electron/main.js",
+  "description": "Windows local AI novel translation service with an Electron launcher",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node --test"
+    "launcher": "electron . --show",
+    "launcher:dev": "electron . --show",
+    "test": "node --test",
+    "pack:win": "electron-builder --win dir --publish never",
+    "dist:win": "electron-builder --win nsis --publish never"
   },
   "dependencies": {
     "docx": "^9.5.1",
@@ -16,5 +24,48 @@
     "jszip": "^3.10.1",
     "multer": "^2.3.0",
     "vue": "^3.5.21"
+  },
+  "devDependencies": {
+    "electron": "^44.2.0",
+    "electron-builder": "^26.16.1"
+  },
+  "build": {
+    "appId": "com.qq547853343.aitranslatenovel9527",
+    "productName": "AITranslateNovel9527",
+    "asar": true,
+    "asarUnpack": [
+      "server.js",
+      "lib/**/*"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "server.js",
+      "lib/**/*",
+      "public/**/*",
+      "electron/**/*",
+      "package.json",
+      "!data{,/**/*}",
+      "!test{,/**/*}",
+      "!*.md"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "AITranslateNovel9527-Setup-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   }
 }

@@ -56,3 +56,27 @@ test('HTTP API supports rules and recoverable translation jobs', async () => {
     await new Promise((resolve) => server.close(resolve)); runtime.database.close(); fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('health endpoint identifies the managed process and launcher shutdown requires its private token', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'translate-health-'));
+  let shutdownRequested = false;
+  const runtime = await createApplication({
+    baseDirectory: directory,
+    databaseFile: ':memory:',
+    secretStore: new MemorySecretStore(),
+    launcherControl: { instanceId: 'launcher-instance-test', token: 'private-control-token', requestShutdown: () => { shutdownRequested = true; } }
+  });
+  const server = runtime.app.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  try {
+    let response = await fetch(`${origin}/api/health`);
+    const health = await response.json();
+    assert.equal(health.status, 'ok'); assert.equal(health.service, 'AITranslateNovel9527'); assert.equal(health.instanceId, 'launcher-instance-test'); assert.equal(health.pid, process.pid);
+    response = await fetch(`${origin}/api/launcher/shutdown`, { method: 'POST', headers: { 'x-launcher-control-token': 'wrong-token' } });
+    assert.equal(response.status, 403); assert.equal(shutdownRequested, false);
+    response = await fetch(`${origin}/api/launcher/shutdown`, { method: 'POST', headers: { 'x-launcher-control-token': 'private-control-token' } });
+    assert.equal(response.status, 202); assert.equal(shutdownRequested, true);
+  } finally {
+    await new Promise((resolve) => server.close(resolve)); runtime.database.close(); fs.rmSync(directory, { recursive: true, force: true });
+  }
+});

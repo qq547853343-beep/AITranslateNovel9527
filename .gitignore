@@ -1,4 +1,6 @@
 node_modules/
 .pnpm-store/
+.pnpm-home/
+dist/
 .env
 data/

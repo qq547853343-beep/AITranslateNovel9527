@@ -1,7 +1,90 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LocalOps 服务管理器</title><style>
-:root{--bg:#0e1420;--card:#172131;--line:#2a3850;--txt:#eef3ff;--muted:#8b99b1;--blue:#7188ff;--green:#40d39b;--red:#ff7186}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 70% 0,#27345d,#0e1420 45%);color:var(--txt);font:14px Segoe UI,system-ui}.app{display:flex;min-height:100vh}.side{width:220px;padding:25px 16px;background:#0c121ddd;border-right:1px solid var(--line)}.brand{font-weight:800;font-size:18px;margin:0 10px 40px}.logo{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:9px;background:var(--blue);margin-right:8px}.nav-title{color:#64728a;font-size:10px;letter-spacing:.13em;margin:22px 12px 8px}.nav a{display:block;text-decoration:none;color:var(--muted);padding:11px 12px;border-radius:8px;margin:4px 0}.nav a.active,.nav a:hover{color:white;background:#222e47}main{max-width:1250px;width:100%;margin:auto;padding:32px}.top{color:var(--muted);font-size:12px;margin-bottom:30px}.title{display:flex;justify-content:space-between;align-items:end;margin-bottom:22px}.title h1{margin:0 0 6px;font-size:29px}.title p{margin:0;color:var(--muted)}.btn{border:1px solid var(--line);border-radius:8px;padding:9px 13px;background:#1b2739;color:var(--txt);cursor:pointer;font-weight:700}.btn:hover{border-color:var(--blue)}.primary{background:var(--blue);border-color:var(--blue)}.card{background:linear-gradient(145deg,#182437,#121a28);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 16px 45px #0005}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}.stat{padding:16px 18px}.stat label{display:block;color:var(--muted);font-size:12px;margin-bottom:10px}.stat strong{font-size:24px}.stat small{color:var(--green);margin-left:8px}.head{display:flex;justify-content:space-between;padding:17px 20px;border-bottom:1px solid var(--line)}.head h2{font-size:15px;margin:0}.muted{color:var(--muted);font-size:12px}.box{margin-bottom:18px}.form{display:grid;grid-template-columns:1.2fr 1fr auto auto;gap:12px;align-items:end;padding:17px 20px}.field label{display:block;color:var(--muted);font-size:11px;margin-bottom:6px}.field input{width:100%;padding:9px;border:1px solid var(--line);border-radius:7px;background:#0d141f;color:white;font:inherit}.ok{color:var(--green);font-size:12px;align-self:center}.results{display:flex;gap:7px;flex-wrap:wrap;padding:0 20px 16px}.chip{padding:6px 9px;border-radius:7px;font:12px Consolas}.free{color:var(--green);background:#142920;border:1px solid #286b55}.busy{color:#ff9aaa;background:#2b1820;border:1px solid #793c4c}.services{display:grid;grid-template-columns:repeat(2,1fr);gap:15px;margin-bottom:18px}.service{padding:19px 20px}.service h3{margin:0 0 8px}.service-meta{color:var(--muted);font-size:12px}.service code{background:#26334a;padding:3px 6px;border-radius:4px;color:#d5def5}.service-actions{display:flex;gap:8px;margin-top:18px}.service-actions .btn{font-size:12px;padding:7px 10px}.lower{display:grid;grid-template-columns:1.4fr 1fr;gap:15px}.logs{padding:17px 20px;font:12px/1.9 Consolas;color:#b3bfd2}.logs b{color:var(--green)}.settings{padding:8px 20px}.setting{padding:13px 0;border-bottom:1px solid #243043}.setting:last-child{border:0}.setting span{display:block;color:var(--muted);font-size:12px;margin-top:3px}.switch{float:right;width:36px;height:20px;border-radius:12px;background:#35425d;padding:3px}.switch:after{content:"";display:block;width:14px;height:14px;border-radius:50%;background:#a3afc3}.on{background:var(--blue)}.on:after{margin-left:16px;background:#fff}@media(max-width:850px){.side{width:70px}.brand span,.nav a span,.nav-title{display:none}main{padding:22px}.stats{grid-template-columns:repeat(2,1fr)}.services,.lower{grid-template-columns:1fr}.form{grid-template-columns:1fr 1fr}.form .btn{grid-column:span 2}}@media(max-width:520px){.side{display:none}.title{display:block}.title .btn{margin-top:15px}}
-</style></head><body><div class="app"><aside class="side"><div class="brand"><i class="logo">⌁</i><span>LocalOps</span></div><nav class="nav"><div class="nav-title">WORKSPACE</div><a class="active" href="#">▦　服务概览</a><a href="#">◉　运行日志</a><a href="#">⚙　配置中心</a><div class="nav-title">SYSTEM</div><a href="#">◌　系统设置</a></nav></aside><main><div class="top">Workspace / 服务概览</div><div class="title"><div><h1>服务概览</h1><p>统一管理本机上的应用、脚本与后台服务。</p></div><button class="btn primary">＋ 添加服务</button></div><section class="stats"><div class="card stat"><label>全部服务</label><strong>6</strong><small>＋1 本周</small></div><div class="card stat"><label>运行中</label><strong>4</strong><small>67%</small></div><div class="card stat"><label>CPU 使用</label><strong>18.4%</strong><small>正常</small></div><div class="card stat"><label>内存占用</label><strong>3.2 GB</strong><small>稳定</small></div></section><section class="card box"><div class="head"><h2>服务端口配置</h2><span class="muted">修改后需重启服务生效</span></div><div class="form"><div class="field"><label>服务</label><input value="DeepSeek 翻译服务" readonly></div><div class="field"><label>监听端口</label><input id="servicePort" type="number" min="1" max="65535" value="6501"></div><button class="btn primary" onclick="savePort()">保存端口</button><span id="saveState" class="ok"></span></div></section><section class="card box"><div class="head"><h2>端口占用搜索</h2><span class="muted">手动检测 · 不实时轮询</span></div><div class="form"><div class="field"><label>开始端口</label><input id="scanStart" type="number" value="6501"></div><div class="field"><label>结束端口（可选）</label><input id="scanEnd" type="number" placeholder="同开始端口"></div><button class="btn" onclick="scanPorts()">搜索占用情况</button><span id="scanNote" class="muted">点击后开始检测</span></div><div id="results" class="results"></div></section><section class="services"><article class="card service"><h3>DeepSeek 翻译服务</h3><div class="service-meta">● <span style="color:var(--green)">运行中</span> · 端口 <code id="portLabel">6501</code> · Node.js</div><div class="service-actions"><button class="btn">停止</button><button class="btn">重启</button><button class="btn" onclick="openService(Number(portLabel.textContent))">打开服务</button></div></article><article class="card service"><h3>数据处理 API</h3><div class="service-meta">● <span style="color:#f3c264">启动中</span> · 端口 <code>8000</code> · Python</div><div class="service-actions"><button class="btn">停止</button><button class="btn">重启</button><button class="btn" onclick="openService(8000)">打开服务</button></div></article></section><section class="lower"><div class="card"><div class="head"><h2>最近日志</h2><span class="muted">手动刷新</span></div><div class="logs"><div><span class="muted">14:32:08</span> <b>INFO</b> translator service listening on :6501</div><div><span class="muted">14:32:06</span> <b>INFO</b> DeepSeek API client initialized</div><div><span class="muted">14:31:58</span> WARN data-api retrying health check</div></div></div><div class="card"><div class="head"><h2>快速设置</h2></div><div class="settings"><div class="setting">开机自动启动<span>启动管理器时运行服务</span><i class="switch on"></i></div><div class="setting">异常自动重启<span>服务退出后自动恢复</span><i class="switch on"></i></div><div class="setting">最小化到托盘<span>关闭窗口后保持运行</span><i class="switch"></i></div></div></div></section></main></div><script>
-function savePort(){const p=Number(servicePort.value);if(p<1||p>65535){saveState.textContent='端口无效';saveState.style.color='var(--red)';return}portLabel.textContent=p;scanStart.value=p;saveState.textContent='已保存，重启后生效'}
-function openService(port){window.open(`http://localhost:${port}/`,'_blank','noopener')}
-async function scanPorts(){const a=Number(scanStart.value),b=Number(scanEnd.value)||a;if(!a||a>b){scanNote.textContent='请输入有效范围';return}scanNote.textContent='正在搜索…';results.innerHTML='';try{const r=await fetch(`/api/ports/check?start=${a}&end=${b}`),d=await r.json();if(!r.ok)throw Error(d.error);d.ports.forEach(x=>{const e=document.createElement('span');e.className='chip '+(x.occupied?'busy':'free');e.textContent=`${x.port} · ${x.occupied?'占用':'空闲'}`;results.appendChild(e)});scanNote.textContent=`已完成：${a}–${b}，不会自动刷新`}catch(e){scanNote.textContent='检测失败：'+e.message}}
-</script></body></html>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self'; img-src 'self' data:; connect-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'">
+  <title>AITranslateNovel9527 启动器</title>
+  <link rel="stylesheet" href="./manager.css">
+  <script src="../node_modules/vue/dist/vue.global.prod.js"></script>
+</head>
+<body>
+<div id="launcher" class="shell" v-cloak>
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-icon">译</span><div><b>AITranslate</b><small>Novel9527 · ver0.2</small></div></div>
+    <nav>
+      <button :class="{active:view==='overview'}" @click="view='overview'">服务概览</button>
+      <button :class="{active:view==='logs'}" @click="view='logs';refreshLogs()">运行日志</button>
+      <button :class="{active:view==='settings'}" @click="view='settings'">启动设置</button>
+    </nav>
+    <div class="local-note"><i></i><span>管理端口固定为<br>127.0.0.1:7000</span></div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <div><p>WINDOWS DESKTOP LAUNCHER</p><h1>{{viewTitle}}</h1></div>
+      <div class="top-actions"><span class="state-pill" :class="snapshot.state">{{stateLabel}}</span><button class="button secondary" @click="refreshAll" :disabled="busy">刷新</button></div>
+    </header>
+
+    <div v-if="!apiAvailable" class="alert danger"><b>安全启动器 API 不可用</b><span>请从 Electron 启动器打开此页面；普通浏览器页面不能控制本机进程。</span></div>
+    <div v-if="snapshot.managementError" class="alert danger"><b>管理端口异常</b><span>{{snapshot.managementError}}</span></div>
+    <div v-if="errorMessage" class="alert danger"><b>操作失败</b><span>{{errorMessage}}</span><button @click="errorMessage=''">×</button></div>
+    <div v-if="notice" class="alert success"><b>已完成</b><span>{{notice}}</span><button @click="notice=''">×</button></div>
+
+    <section v-show="view==='overview'" class="view-grid">
+      <div class="metrics">
+        <article><span>进程</span><strong>{{snapshot.processExists?'存在':'未运行'}}</strong><small>PID {{snapshot.pid||'—'}}</small></article>
+        <article><span>端口监听</span><strong>{{snapshot.portListening?'成功':'未监听'}}</strong><small>127.0.0.1:{{snapshot.activePort||snapshot.servicePort}}</small></article>
+        <article><span>健康检查</span><strong>{{snapshot.healthy?'通过':'未通过'}}</strong><small>三项同时通过才算正常</small></article>
+        <article><span>自动重启</span><strong>{{snapshot.settings?.autoRestartService?'已开启':'已关闭'}}</strong><small>{{snapshot.restartAttempts||0}} / 3 次</small></article>
+      </div>
+
+      <section class="card service-card">
+        <div class="card-head"><div><h2>翻译服务</h2><p>server.js 由启动器作为受控子进程运行</p></div><span class="health-dot" :class="{ok:snapshot.normal}"></span></div>
+        <div class="service-body">
+          <div class="service-status"><div class="service-icon">DS</div><div><b>{{snapshot.normal?'服务正常':stateLabel}}</b><span>DeepSeek translation service · Node.js</span></div></div>
+          <dl><div><dt>保存端口</dt><dd>{{snapshot.servicePort}}</dd></div><div><dt>实际端口</dt><dd>{{snapshot.activePort||'—'}}</dd></div><div><dt>启动时间</dt><dd>{{formatTime(snapshot.startedAt)}}</dd></div><div><dt>最近退出</dt><dd>{{lastExitText}}</dd></div></dl>
+          <div v-if="snapshot.lastError" class="inline-error">{{snapshot.lastError}}</div>
+          <div class="service-actions">
+            <button class="button primary" @click="operate('start')" :disabled="busy||snapshot.normal">启动服务</button>
+            <button class="button danger" @click="operate('stop')" :disabled="busy||!snapshot.processExists">停止服务</button>
+            <button class="button secondary" @click="operate('restart')" :disabled="busy||!snapshot.processExists">重启服务</button>
+            <button class="button secondary" @click="openService" :disabled="busy||!snapshot.normal">打开翻译页面</button>
+          </div>
+          <p v-if="busy" class="busy-note"><span></span>正在执行：{{snapshot.activeOperation||'启动器操作'}}，并发操作已锁定</p>
+        </div>
+      </section>
+
+      <section class="card port-card">
+        <div class="card-head"><div><h2>翻译服务端口</h2><p>先验证、停止旧服务、等待释放、启动并健康检查，成功后才保存</p></div></div>
+        <div class="port-form"><label><span>新服务端口</span><input v-model.number="servicePortDraft" type="number" min="1" max="65535"></label><button class="button primary" @click="savePort" :disabled="busy||servicePortDraft===snapshot.servicePort">验证并切换</button></div>
+        <p class="hint">管理端口 7000 固定且不可修改；两个端口不能相同。不会随机换端口，也不会结束未知占用进程。</p>
+      </section>
+
+      <section class="card scan-card">
+        <div class="card-head"><div><h2>端口检测</h2><p>由 Electron 主进程执行，翻译服务停止时仍然可用</p></div></div>
+        <div class="scan-form"><label><span>开始</span><input v-model.number="scanStart" type="number" min="1" max="65535"></label><label><span>结束</span><input v-model.number="scanEnd" type="number" min="1" max="65535"></label><button class="button secondary" @click="scanPorts" :disabled="scanning">{{scanning?'检测中…':'检测端口'}}</button></div>
+        <div class="chips"><span v-for="item in scanResults" :key="item.port" :class="item.status">{{item.port}} · {{portStateLabel(item.status)}}</span><em v-if="!scanResults.length">尚未检测</em></div>
+      </section>
+    </section>
+
+    <section v-show="view==='logs'" class="card logs-card">
+      <div class="card-head log-head"><div><h2>最近日志</h2><p>磁盘保留 7 天，单文件 10 MB，最多 5 个历史文件；敏感字段已脱敏</p></div><div><select v-model="logKind" @change="refreshLogs"><option value="all">全部日志</option><option value="launcher">Launcher</option><option value="service">Service</option></select><select v-model="logFilter"><option value="all">全部级别</option><option value="error">错误</option><option value="warn">警告</option></select><button class="button secondary" @click="refreshLogs">刷新</button><button class="button ghost" @click="logs=[]">清空显示</button></div></div>
+      <pre class="log-output"><code v-for="(line,index) in filteredLogs" :key="index" :class="logClass(line)">{{line}}</code><span v-if="!filteredLogs.length">暂无日志</span></pre>
+    </section>
+
+    <section v-show="view==='settings'" class="settings-layout">
+      <section class="card settings-card">
+        <div class="card-head"><div><h2>Windows 启动行为</h2><p>只注册 Electron 启动器，不直接注册 server.js</p></div></div>
+        <label class="setting-row"><span><b>登录后启动启动器</b><small>使用 Electron 的当前用户登录项</small></span><input type="checkbox" :checked="snapshot.settings?.autoStartLauncher" @change="changeSetting('autoStartLauncher',$event.target.checked)"></label>
+        <label class="setting-row"><span><b>自动启动翻译服务</b><small>启动器就绪后再启动受控子进程</small></span><input type="checkbox" :checked="snapshot.settings?.autoStartService" @change="changeSetting('autoStartService',$event.target.checked)"></label>
+        <label class="setting-row"><span><b>启动时隐藏</b><small>默认隐藏到系统托盘，关闭窗口不会退出</small></span><input type="checkbox" :checked="snapshot.settings?.startHidden" @change="changeSetting('startHidden',$event.target.checked)"></label>
+        <label class="setting-row"><span><b>服务异常后自动重启</b><small>默认关闭；开启后连续最多重试 3 次</small></span><input type="checkbox" :checked="snapshot.settings?.autoRestartService" @change="changeSetting('autoRestartService',$event.target.checked)"></label>
+      </section>
+      <section class="card update-card"><div class="card-head"><div><h2>自动更新</h2><p>ver0.2 状态接口占位</p></div></div><div class="update-body"><strong>{{updateStatus.message||snapshot.update?.message}}</strong><p>本期不会下载、安装、替换或回滚任何程序。</p><button class="button secondary" @click="checkUpdate">检查接口状态</button></div></section>
+    </section>
+  </main>
+</div>
+<script src="./manager.js"></script>
+</body>
+</html>
