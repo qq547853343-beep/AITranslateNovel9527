@@ -11,6 +11,8 @@ createApp({
     failedSegments: 0, remainingSegments: 0, jobMeta: {}, pollTimer: null, estimateTimer: null,
     ruleSets: [], selectedRuleSetId: '', selectedRuleSet: null, activeRuleSetIds: [], showDeleted: false,
     ruleSearch: '', ruleInstruction: '', parsingRule: false, pendingOperations: [],
+    ruleEditorOpen: false, savingRule: false, editingRuleId: '', ruleEditorError: '',
+    ruleDraft: { type: 'term', source: '', target: '', category: '', sendMode: 'matched', priority: 0, aliasesText: '', forbiddenText: '', note: '', enabled: true },
     bundleOptions: { translation: true, source: true, glossary: true, notes: true, analysis: true, rules: true, manifest: true }
   }),
   computed: {
@@ -26,7 +28,8 @@ createApp({
     validationIssues() { return this.jobMeta.validationIssues || []; },
     activeRuleSets() { return this.ruleSets.filter((item) => !item.deletedAt); },
     deletedRuleSets() { return this.ruleSets.filter((item) => item.deletedAt); },
-    filteredRules() { const query = this.ruleSearch.trim().toLocaleLowerCase(); const rules = this.selectedRuleSet?.rules || []; return query ? rules.filter((rule) => [rule.source, rule.target, rule.category, rule.type].some((value) => String(value || '').toLocaleLowerCase().includes(query))) : rules; }
+    filteredRules() { const query = this.ruleSearch.trim().toLocaleLowerCase(); const rules = this.selectedRuleSet?.rules || []; return query ? rules.filter((rule) => [rule.source, rule.target, rule.category, rule.type].some((value) => String(value || '').toLocaleLowerCase().includes(query))) : rules; },
+    ruleDraftValid() { const sourceOptional = ['style','background','format'].includes(this.ruleDraft.type); const targetOptional = ['background','format'].includes(this.ruleDraft.type); return (sourceOptional || this.ruleDraft.source.trim()) && (targetOptional || this.ruleDraft.target.trim()); }
   },
   async mounted() {
     await Promise.all([this.loadKeyStatus(), this.loadUiSettings(), this.loadRuleSets()]);
@@ -62,27 +65,27 @@ createApp({
     async deleteRuleSet() { if (!confirm(`删除规则集“${this.selectedRuleSet.name}”？它会进入回收站。`)) return; try { await this.api(`/api/rule-sets/${this.selectedRuleSet.id}`, { method: 'DELETE' }); this.activeRuleSetIds = this.activeRuleSetIds.filter((id) => id !== this.selectedRuleSet.id); this.selectedRuleSetId = ''; await this.loadRuleSets(); await this.saveUiSettings(); } catch (error) { alert(error.message); } },
     async restoreRuleSet(set) { try { await this.api(`/api/rule-sets/${set.id}/restore`, { method: 'POST' }); await this.loadRuleSets(); } catch (error) { alert(error.message); } },
     async toggleRule(rule) { try { await this.api(`/api/rule-sets/${this.selectedRuleSet.id}/rules/${rule.id}`, this.json('PATCH', { enabled: !rule.enabled })); await this.loadSelectedRuleSet(); await this.loadRuleSets(); } catch (error) { alert(error.message); } },
-    async addRule() {
-      const source = prompt('原文术语或规则名称'); if (source == null) return;
-      const target = prompt('规定译法或规则内容'); if (target == null) return;
-      const type = prompt('规则类型：term/person/place/organization/skill/style/title/forbidden/format/background/temporary', 'term'); if (type == null) return;
-      try { await this.api(`/api/rule-sets/${this.selectedRuleSet.id}/rules`, this.json('POST', { source, target, type: type.trim() || 'term' })); await this.loadSelectedRuleSet(); await this.loadRuleSets(); }
-      catch (error) { alert(error.message); }
+    addRule() { this.openRuleEditor(); },
+    editRule(rule) { this.openRuleEditor(rule); },
+    openRuleEditor(rule = null) {
+      this.editingRuleId = rule?.id || ''; this.ruleEditorError = '';
+      this.ruleDraft = { type: rule?.type || 'term', source: rule?.source || '', target: rule?.target || '', category: rule?.category || '', sendMode: rule?.sendMode || 'matched', priority: Number(rule?.priority) || 0, aliasesText: (rule?.aliases || []).join('，'), forbiddenText: (rule?.forbidden || []).join('，'), note: rule?.note || '', enabled: rule?.enabled !== false };
+      this.ruleEditorOpen = true;
+      this.$nextTick(() => this.$refs.ruleSource?.focus());
     },
-    async editRule(rule) {
-      const source = prompt('原文术语或规则名称', rule.source); if (source == null) return;
-      const target = prompt('规定译法或规则内容', rule.target); if (target == null) return;
-      const type = prompt('规则类型：term/person/place/organization/skill/style/title/forbidden/format/background/temporary', rule.type); if (type == null) return;
-      const category = prompt('分类', rule.category || ''); if (category == null) return;
-      const aliases = prompt('别名（多个请用逗号分隔）', (rule.aliases || []).join(', ')); if (aliases == null) return;
-      const forbidden = prompt('禁止译法（多个请用逗号分隔）', (rule.forbidden || []).join(', ')); if (forbidden == null) return;
-      const sendMode = prompt('发送方式：matched/always/contextual/manual', rule.sendMode || 'matched'); if (sendMode == null) return;
-      const priority = prompt('优先级（数字越大越优先）', String(rule.priority || 0)); if (priority == null) return;
-      const note = prompt('备注', rule.note || ''); if (note == null) return;
-      const splitList = (value) => value.split(/[,，\n]/).map((item) => item.trim()).filter(Boolean);
-      try { await this.api(`/api/rule-sets/${this.selectedRuleSet.id}/rules/${rule.id}`, this.json('PATCH', { source, target, type: type.trim(), category, aliases: splitList(aliases), forbidden: splitList(forbidden), sendMode: sendMode.trim(), priority: Number(priority) || 0, note })); await this.loadSelectedRuleSet(); await this.loadRuleSets(); }
-      catch (error) { alert(error.message); }
+    closeRuleEditor() { if (!this.savingRule) this.ruleEditorOpen = false; },
+    onRuleTypeChange() { if (!this.editingRuleId && ['style','background','format'].includes(this.ruleDraft.type) && this.ruleDraft.sendMode === 'matched') this.ruleDraft.sendMode = 'always'; },
+    async saveRule() {
+      if (!this.selectedRuleSet?.id) return;
+      const splitList = (value) => String(value || '').split(/[,，\n]/).map((item) => item.trim()).filter(Boolean);
+      const payload = { type: this.ruleDraft.type, source: this.ruleDraft.source.trim(), target: this.ruleDraft.target.trim(), category: this.ruleDraft.category.trim(), sendMode: this.ruleDraft.sendMode, priority: Number(this.ruleDraft.priority) || 0, aliases: splitList(this.ruleDraft.aliasesText), forbidden: splitList(this.ruleDraft.forbiddenText), note: this.ruleDraft.note.trim(), enabled: this.ruleDraft.enabled };
+      this.savingRule = true; this.ruleEditorError = '';
+      try { const url = this.editingRuleId ? `/api/rule-sets/${this.selectedRuleSet.id}/rules/${this.editingRuleId}` : `/api/rule-sets/${this.selectedRuleSet.id}/rules`; await this.api(url, this.json(this.editingRuleId ? 'PATCH' : 'POST', payload)); this.ruleEditorOpen = false; await this.loadSelectedRuleSet(); await this.loadRuleSets(); this.status = this.editingRuleId ? '规则已更新' : '规则已新增'; }
+      catch (error) { this.ruleEditorError = error.message; }
+      finally { this.savingRule = false; }
     },
+    ruleTypeLabel(type) { return ({ term:'术语', person:'人物', place:'地名', organization:'组织', skill:'技能', style:'风格', title:'称谓', forbidden:'禁止译法', format:'格式保护', background:'背景', temporary:'临时' })[type] || type; },
+    sendModeLabel(mode) { return ({ matched:'正文命中', always:'始终发送', contextual:'上下文命中', manual:'手动发送' })[mode] || mode; },
     async deleteRule(rule) { if (!confirm(`删除规则“${rule.source || rule.type}”？`)) return; try { await this.api(`/api/rule-sets/${this.selectedRuleSet.id}/rules/${rule.id}`, { method: 'DELETE' }); await this.loadSelectedRuleSet(); await this.loadRuleSets(); } catch (error) { alert(error.message); } },
     async parseRule() { this.parsingRule = true; try { const data = await this.api('/api/rules/parse', this.json('POST', { ruleSetId: this.selectedRuleSetId, instruction: this.ruleInstruction })); this.pendingOperations = data.operations || []; if (!this.pendingOperations.length) this.status = 'AI 未识别到可执行规则'; } catch (error) { this.status = error.message; } finally { this.parsingRule = false; } },
     async applyParsedRules() { try { await this.api('/api/rules/apply', this.json('POST', { ruleSetId: this.selectedRuleSetId, operations: this.pendingOperations })); this.pendingOperations = []; this.ruleInstruction = ''; await this.loadSelectedRuleSet(); await this.loadRuleSets(); this.status = '规则已保存'; } catch (error) { this.status = error.message; } },
