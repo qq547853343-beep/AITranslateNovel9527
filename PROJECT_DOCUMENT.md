@@ -531,18 +531,218 @@ AI 内部使用结构化响应：
 
 未提供规则集和增强选项时，保持现有翻译行为。
 
-## 19. 安全要求
+## 19. 本地数据库与云端迁移架构
 
-- API Key 继续使用现有本地加密方案。
+### 19.1 本地存储方案
+
+`ver0.1` 采用 SQLite 统一保存以下非文件型数据：
+
+- 应用设置
+- 独立规则集和规则条目
+- 规则集版本记录
+- 临时翻译任务、分段状态和恢复信息
+- 加密后的 API Key 记录
+- 数据库结构版本和迁移记录
+
+SQLite 是嵌入式文件数据库，不需要用户提前安装或启动独立数据库服务。启动 Node.js 服务时，应用自动完成：
+
+```text
+启动 Node.js 服务
+→ 打开 data/app.db
+→ 数据库不存在时自动创建
+→ 执行尚未完成的结构迁移
+→ 校验数据库状态
+→ 开始提供翻译服务
+```
+
+运行时可能出现以下本地文件：
+
+```text
+data/
+├─ app.db
+├─ app.db-wal
+├─ app.db-shm
+└─ assets/
+```
+
+这些文件继续由 `.gitignore` 中的 `data/` 规则排除，不上传到 GitHub。
+
+本地数据库建议：
+
+- 使用 `better-sqlite3` 作为 Node.js SQLite 驱动，并在实施前确认目标 Windows 环境兼容性。
+- 启用 WAL 模式以改善读写并发。
+- 启用外键约束。
+- 设置合理的 `busy_timeout`。
+- 规则修改、任务进度和密钥迁移必须使用事务。
+- 数据库迁移采用递增版本号，禁止依赖手工改表。
+- 对数据库文件提供可选的本地备份和恢复能力。
+- 不将数据库放在可能被多个设备同时写入的同步盘目录中。
+
+### 19.2 数据访问抽象
+
+业务代码不能直接依赖 SQLite SQL。通过 Repository 接口访问数据：
+
+```text
+RuleSetRepository
+├─ SQLiteRuleSetRepository
+└─ PostgreSQLRuleSetRepository
+
+TranslationJobRepository
+├─ SQLiteTranslationJobRepository
+└─ PostgreSQLTranslationJobRepository
+
+SettingsRepository
+├─ SQLiteSettingsRepository
+└─ PostgreSQLSettingsRepository
+```
+
+核心业务层只依赖接口，不感知底层使用 SQLite 或 PostgreSQL。接口至少覆盖：
+
+```js
+class RuleSetRepository {
+  async list(options) {}
+  async getById(id) {}
+  async create(ruleSet) {}
+  async update(id, changes, expectedVersion) {}
+  async softDelete(id) {}
+  async restore(id) {}
+}
+```
+
+`expectedVersion` 用于防止未来多用户或多实例环境下发生并发覆盖。
+
+### 19.3 密钥存储抽象
+
+API Key 通过统一的 `SecretStore` 接口管理：
+
+```text
+SecretStore
+├─ DpapiSecretStore：Windows 本地版
+├─ KmsSecretStore：未来云端版
+└─ MemorySecretStore：自动化测试
+```
+
+统一接口：
+
+```js
+class SecretStore {
+  async save(scopeId, secretName, plaintext) {}
+  async read(scopeId, secretName) {}
+  async delete(scopeId, secretName) {}
+  async rotate(scopeId, secretName) {}
+}
+```
+
+本地版采用：
+
+```text
+API Key
+→ Windows DPAPI 绑定当前 Windows 用户进行保护
+→ 仅将密文和版本信息保存到 SQLite
+→ 使用时在内存中短暂解密
+```
+
+SQLite 中不保存独立的明文主密钥。密钥记录采用可迁移的版本化格式：
+
+```json
+{
+  "scopeId": "local-user",
+  "secretName": "deepseek-api-key",
+  "provider": "windows-dpapi",
+  "formatVersion": 1,
+  "ciphertext": "...",
+  "metadata": {},
+  "createdAt": "...",
+  "updatedAt": "..."
+}
+```
+
+现有 MVP 使用 `.master-key` 和 AES-256-GCM。升级到 `ver0.1` 时需要提供一次性兼容迁移：
+
+```text
+检测旧 secrets.json 和 .master-key
+→ 使用现有逻辑解密
+→ 通过 DpapiSecretStore 重新加密
+→ 在事务中写入 SQLite
+→ 重新读取并验证
+→ 迁移成功后再清理旧密钥文件
+```
+
+迁移失败时继续保留旧文件并给出明确错误，不能导致用户密钥丢失。
+
+### 19.4 未来云端方案
+
+迁移云端后，推荐组合为：
+
+```text
+PostgreSQL
++ 云平台 KMS / Key Vault / Secret Manager
++ KmsSecretStore
++ 多用户身份认证和权限隔离
+```
+
+如果云服务使用运营方统一提供的 DeepSeek Key，该密钥应直接存入云平台 Secret Manager，不进入业务数据库。
+
+如果允许每个用户提供自己的 AI Key，则使用信封加密：
+
+```text
+用户 API Key
+→ 随机数据密钥加密
+→ API Key 密文保存到 PostgreSQL
+→ 数据密钥再由云端 KMS 主密钥加密
+→ 加密后的数据密钥与 keyId 一并保存
+```
+
+云端密钥记录示例：
+
+```json
+{
+  "scopeId": "user_9527",
+  "secretName": "deepseek-api-key",
+  "provider": "cloud-kms",
+  "formatVersion": 2,
+  "ciphertext": "...",
+  "metadata": {
+    "keyId": "...",
+    "keyVersion": 1,
+    "encryptedDataKey": "...",
+    "iv": "...",
+    "authTag": "..."
+  }
+}
+```
+
+从本地迁移到云端时，由迁移程序通过 `SecretStore` 完成解密和重新加密，翻译、规则集和任务业务逻辑不需要修改。
+
+### 19.5 可扩展性边界
+
+为保证未来可以扩展为云服务，`ver0.1` 开始遵循：
+
+- 不在业务层直接调用 DPAPI、SQLite 或具体 KMS SDK。
+- 不在业务层直接拼写 SQL。
+- 所有数据记录使用稳定 UUID，而不是依赖本地文件名。
+- 所有持久化记录包含创建时间、更新时间和结构版本。
+- 规则集更新支持乐观并发版本。
+- 临时任务归属通过 `scopeId` 表示；本地为单用户，云端可映射为用户或租户。
+- 模型提供者通过接口抽象，避免业务逻辑绑定 DeepSeek。
+- 本地部署保持零数据库运维；云端部署允许水平扩容。
+
+## 20. 安全要求
+
+- MVP 继续兼容现有 AES-256-GCM 密钥文件，`ver0.1` 目标方案为 SQLite 密文记录加 Windows DPAPI。
 - API Key 不写入日志、规则集、任务记录和导出文件。
+- SQLite 不保存明文 API Key 或明文主密钥。
+- 解密后的 API Key 仅在请求期间短暂保存在内存中。
+- 本地 `SecretStore` 将凭据绑定当前 Windows 用户。
+- 云端 `SecretStore` 使用 KMS 或 Secret Manager，并支持密钥轮换和访问审计。
 - 新增规则修改接口仅允许本机页面调用。
 - 对规则数量、字段长度、请求体大小和任务数量设置限制。
 - 文件名和 ID 必须经过校验，防止路径穿越。
-- 规则文件和任务文件采用临时写入加原子替换。
+- SQLite 写操作使用事务；数据库迁移和备份失败时不得破坏原数据。
 - 图片仍然只保存在本地。
 - 临时任务明确显示保存期限，并允许用户随时清除。
 
-## 20. 推荐代码组织
+## 21. 推荐代码组织
 
 在保留现有入口的基础上逐步拆分：
 
@@ -551,32 +751,54 @@ lib/
 ├─ deepseek-client.js
 ├─ text-segmenter.js
 ├─ context-builder.js
-├─ translation-job-store.js
-├─ rule-set-store.js
 ├─ rule-matcher.js
 ├─ rule-parser.js
 ├─ translation-validator.js
-└─ export-bundle.js
+├─ export-bundle.js
+├─ secrets/
+│  ├─ secret-store.js
+│  ├─ dpapi-secret-store.js
+│  ├─ kms-secret-store.js
+│  └─ memory-secret-store.js
+└─ storage/
+   ├─ database.js
+   ├─ migrations/
+   ├─ rule-set-repository.js
+   ├─ translation-job-repository.js
+   ├─ settings-repository.js
+   ├─ sqlite/
+   └─ postgres/
 ```
 
 `server.js` 继续作为 Express 路由入口。前端继续使用现有 Vue 3 单页形式，首版不强制引入构建工具。
 
-## 21. 推荐实施顺序
+存储和密钥提供者通过启动配置注入：
+
+```text
+本地默认：SQLite + DpapiSecretStore
+自动化测试：临时 SQLite + MemorySecretStore
+未来云端：PostgreSQL + KmsSecretStore
+```
+
+## 22. 推荐实施顺序
 
 1. 为现有翻译、图片和导出能力增加基础回归测试。
-2. 拆分 DeepSeek 调用和文本分段模块，但保持原接口行为。
-3. 实现规则集存储及新建、重命名、编辑、复制、删除和恢复。
-4. 增加右侧规则集界面。
-5. 增加自然语言规则解析、预览和确认。
-6. 增加本地规则匹配、优先级和冲突处理。
-7. 升级长文本分段和上下文连续性。
-8. 实现临时翻译任务、进度查询、取消和中断恢复。
-9. 增加圆形进度条、当前分段和重试操作。
-10. 增加格式保护和术语结果校验。
-11. 增加翻译说明、决策摘要和资料目录导出。
-12. 完整回归 TXT、DOCX、EPUB、图片、API Key 和端口检测功能。
+2. 建立 Repository、SecretStore 和模型提供者接口。
+3. 引入 SQLite、数据库迁移机制和本地 Repository 实现。
+4. 实现 DpapiSecretStore 及现有 AES 密钥文件的安全迁移。
+5. 拆分 DeepSeek 调用和文本分段模块，但保持原接口行为。
+6. 实现规则集的新建、重命名、编辑、复制、删除和恢复。
+7. 增加右侧规则集界面。
+8. 增加自然语言规则解析、预览和确认。
+9. 增加本地规则匹配、优先级和冲突处理。
+10. 升级长文本分段和上下文连续性。
+11. 实现临时翻译任务、进度查询、取消和中断恢复。
+12. 增加圆形进度条、当前分段和重试操作。
+13. 增加格式保护和术语结果校验。
+14. 增加翻译说明、决策摘要和资料目录导出。
+15. 完整回归 SQLite、密钥迁移、TXT、DOCX、EPUB、图片、API Key 和端口检测功能。
 
-## 22. ver0.1 完成标准
+## 23. ver0.1 完成标准
 
 `ver0.1` 完成时应满足：
 
@@ -592,8 +814,13 @@ lib/
 - 用户可以复制译文并可靠导出 TXT、DOCX、EPUB。
 - 用户可以将译文与选定的附加资料输出到同一文件夹或 ZIP 包。
 - API Key、图片和临时任务继续遵循本地安全要求。
+- SQLite 随 Node.js 服务自动打开，无需用户启动独立数据库服务。
+- 规则集、设置和临时任务通过 Repository 接口访问。
+- API Key 通过 SecretStore 管理，SQLite 中只保存受保护密文。
+- 现有 AES 密钥文件可以安全迁移，失败时不会丢失原凭据。
+- PostgreSQL Repository 和 KmsSecretStore 已预留稳定接口，未来迁移不需要改写核心翻译逻辑。
 
-## 23. 完整工作流程
+## 24. 完整工作流程
 
 ```text
 输入原文和图片
@@ -613,4 +840,3 @@ lib/
 → 页面显示最终译文
 → 复制或导出 TXT、DOCX、EPUB及配套资料
 ```
-
