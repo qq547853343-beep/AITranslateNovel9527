@@ -3,7 +3,7 @@ import { createStoredZip } from './zip-writer.js';
 import { validateSafeSvg } from './svg-validator.js';
 
 const archiveLimit = 200 * 1024 * 1024;
-const imageLimit = 8 * 1024 * 1024;
+const imageLimit = 20 * 1024 * 1024;
 const blockLimit = 5_000;
 const imageCountLimit = 2_000;
 
@@ -29,7 +29,7 @@ export async function buildWebContentPackage(selection, { fetchImpl = fetch, now
       const previewBytes = await rasterizeSvg(bytes, { width, height, sourceUrl: sources[index] });
       const previewFormat = detectImageFormat(previewBytes);
       if (previewFormat?.extension !== 'png') throw new Error(`SVG 安全预览生成失败：${sources[index]}`);
-      if (previewBytes.length > imageLimit) throw new Error(`SVG 的 PNG 预览超过 8 MB：${sources[index]}`);
+      if (previewBytes.length > imageLimit) throw new Error(`SVG 的 PNG 预览超过 20 MB：${sources[index]}`);
       downloadedBytes += previewBytes.length;
       if (downloadedBytes > archiveLimit - (10 * 1024 * 1024)) throw new Error('图片总大小过大，生成的 ZIP 将超过 200 MB。');
       assets.set(sources[index], { path: `assets/image-${sequence}.svg`, previewPath: `assets/image-${sequence}.preview.png`, bytes, previewBytes, ...format });
@@ -61,14 +61,14 @@ async function downloadImage(sourceUrl, fetchImpl) {
   const response = await fetchImpl(url.href, { credentials: 'omit', redirect: 'follow', referrerPolicy: 'no-referrer', cache: 'no-cache' });
   if (!response.ok) throw new Error(`图片下载失败（HTTP ${response.status}）：${url.href}`);
   const length = Number(response.headers?.get?.('content-length') || 0);
-  if (length > imageLimit) throw new Error(`图片超过 8 MB：${url.href}`);
+  if (length > imageLimit) throw new Error(`图片超过 20 MB：${url.href}`);
   if (!response.body?.getReader) {
     const value = new Uint8Array(await response.arrayBuffer());
-    if (value.length > imageLimit) throw new Error(`图片超过 8 MB：${url.href}`);
+    if (value.length > imageLimit) throw new Error(`图片超过 20 MB：${url.href}`);
     return value;
   }
   const reader = response.body.getReader(); const chunks = []; let total = 0;
-  while (true) { const { done, value } = await reader.read(); if (done) break; total += value.length; if (total > imageLimit) { await reader.cancel(); throw new Error(`图片超过 8 MB：${url.href}`); } chunks.push(value); }
+  while (true) { const { done, value } = await reader.read(); if (done) break; total += value.length; if (total > imageLimit) { await reader.cancel(); throw new Error(`图片超过 20 MB：${url.href}`); } chunks.push(value); }
   const result = new Uint8Array(total); let offset = 0; for (const chunk of chunks) { result.set(chunk, offset); offset += chunk.length; } return result;
 }
 

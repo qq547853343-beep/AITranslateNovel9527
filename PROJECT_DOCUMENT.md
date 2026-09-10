@@ -1002,7 +1002,7 @@ DeepSeek 是 `TranslationProvider` / `RuleProposalProvider` 的具体实现。�
 
 扩展使用跨域主机权限重新下载图片，但明确使用 `credentials: omit`，不发送 Cookie 或 Authorization。PNG、JPEG、GIF 和 WebP 字节不经 Canvas、不转码，以原格式写入 STORE ZIP 条目。安全 SVG 的原始字节也写入 ZIP，另通过浏览器安全图像模式生成 PNG 预览；含主动内容或外部引用的 SVG 拒绝导出。选区图片的 `getBoundingClientRect()` 尺寸被记录为 CSS 像素。相同 URL 只下载一次，多个图片块可复用同一资源。
 
-生成包严格包含 `manifest.json`、`document.json`、`content.html` 和已引用的 `assets/`。`document.json` 仍是规范来源，`content.html` 由已转义的模型重新生成。选区与导入合同同步限制为最多 5,000 个内容块、2,000 个唯一图片、4,004 个 ZIP 条目（含可选目录条目）、200 MB ZIP、500 MB 解压总量、单资源 8 MB 和文字 200,000 字符；SVG 原件和 PNG 预览分别计入条目与容量。任一图片失败时构建整体失败，不下载半成品 ZIP。这不引入大型文档任务队列或 Worker Pool。
+生成包严格包含 `manifest.json`、`document.json`、`content.html` 和已引用的 `assets/`。`document.json` 仍是规范来源，`content.html` 由已转义的模型重新生成。选区与导入合同同步限制为最多 5,000 个内容块、2,000 个唯一图片、4,004 个 ZIP 条目（含可选目录条目）、200 MB ZIP、500 MB 解压总量、单资源 20 MB 和文字 200,000 字符；SVG 原件和 PNG 预览分别计入条目与容量。任一图片失败时构建整体失败，不下载半成品 ZIP。这不引入大型文档任务队列或 Worker Pool。
 
 自然语言规则候选在 Application 层统一规范化：风格、背景和格式说明会归入 `target` 并默认始终发送；只提供禁止词列表的禁止译法规则允许空 `target`；AI 更新操作中的空占位字段不会清除现有必要字段。每条候选包含保存前校验状态，前端会标出无效项并禁止确认，服务端再次校验以防绕过界面。
 
