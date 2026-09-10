@@ -54,6 +54,49 @@ test('selection extractor remains self-contained after Chrome serializes the inj
   assert.equal(result.blocks[0].text, '已选正文');
 });
 
+test('selection extractor restores WordPress emoji images to inline alt text', async () => {
+  const text = (value) => ({ nodeType: 3, nodeValue: value });
+  const element = (tagName, attributes = {}, childNodes = []) => ({
+    nodeType: 1,
+    tagName,
+    childNodes,
+    currentSrc: '',
+    naturalWidth: 18,
+    naturalHeight: 18,
+    getAttribute(name) { return attributes[name] || ''; },
+    getBoundingClientRect() { return { width: 18, height: 18 }; },
+  });
+  const emoji = element('IMG', { class: 'emoji', alt: '‼', src: 'https://s.w.org/images/core/emoji/17.0.2/svg/203c.svg' });
+  const heart = element('IMG', { class: 'wp-smiley', alt: '♥', src: 'https://s.w.org/images/core/emoji/17.0.2/svg/2665.svg' });
+  const illustration = element('IMG', { alt: '月亮插图', src: 'https://s.w.org/moon.svg', width: '36', height: '36' });
+  const paragraph = element('P', {}, [text('あぎっ'), emoji, text('\nプリプリ'), heart, text('\n插图前'), illustration, text('插图后')]);
+  const range = { cloneContents: () => ({ childNodes: [paragraph] }), intersectsNode: () => true };
+  const images = [emoji, heart, illustration];
+  const context = {
+    window: { getSelection: () => ({ rangeCount: 1, isCollapsed: false, getRangeAt: () => range, toString: () => 'fallback' }) },
+    document: {
+      images, baseURI: 'https://example.com/', title: 'Emoji 网页', documentElement: { lang: 'ja' },
+      createDocumentFragment: () => ({ childNodes: [], append(value) { this.childNodes.push(...value.childNodes); } }),
+    },
+    Node: { TEXT_NODE: 3, ELEMENT_NODE: 1 }, URL, location: { href: 'https://example.com/chapter' }, Map, Set,
+  };
+  const result = vm.runInNewContext(`(${extractSelectedContent.toString()})()`, context);
+  assert.equal(result.blocks.length, 3);
+  assert.equal(result.blocks[0].kind, 'text');
+  assert.equal(result.blocks[0].text, 'あぎっ‼\nプリプリ♥\n插图前');
+  assert.equal(result.blocks[1].kind, 'image');
+  assert.equal(result.blocks[1].sourceUrl, 'https://s.w.org/moon.svg');
+  assert.equal(result.blocks[2].text, '插图后');
+  const built = await buildWebContentPackage(result, {
+    fetchImpl: async () => response(safeSvg),
+    rasterizeSvg: async () => png,
+    now: () => new Date('2026-09-10T01:02:03.000Z'),
+  });
+  assert.equal(built.assets.length, 1);
+  assert.equal(built.document.blocks[0].text, 'あぎっ‼\nプリプリ♥\n插图前');
+  assert.equal(Array.from(built.document.blocks, (block) => block.kind).join(','), 'text,image,text');
+});
+
 test('extension creates an importer-compatible ZIP and preserves downloaded image bytes', async () => {
   const calls = [];
   const fetchImpl = async (url, options) => {

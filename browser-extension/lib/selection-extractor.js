@@ -29,6 +29,15 @@ export function extractSelectedContent() {
   const blockTags = { P: 'p', DIV: 'p', ARTICLE: 'p', SECTION: 'p', MAIN: 'p', H1: 'h1', H2: 'h2', H3: 'h3', BLOCKQUOTE: 'blockquote', LI: 'li', PRE: 'blockquote' };
   const ignored = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'IFRAME', 'OBJECT', 'EMBED', 'FORM', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA']);
   const cleanText = (value) => String(value || '').replace(/\u00a0/g, ' ').replace(/[ \t]+\n/g, '\n').replace(/\n[ \t]+/g, '\n').trim();
+  const semanticEmojiText = (node, candidate) => {
+    const alt = String(node.getAttribute('alt') || '').trim();
+    if (!alt || Array.from(alt).length > 16 || /[\r\n]/.test(alt)) return '';
+    const classes = String(node.getAttribute('class') || '').toLowerCase().split(/\s+/).filter(Boolean);
+    const markedAsEmoji = classes.includes('emoji') || classes.includes('wp-smiley');
+    let wordpressEmojiSource = false;
+    try { wordpressEmojiSource = /^https?:\/\/s\.w\.org\/images\/core\/emoji\//i.test(new URL(candidate, document.baseURI).href); } catch {}
+    return markedAsEmoji || wordpressEmojiSource ? alt : '';
+  };
   const flush = () => { const text = cleanText(buffer); if (text) blocks.push({ id: `text-${blocks.length}`, kind: 'text', tag: currentTag, text }); buffer = ''; };
   const walk = (node, inheritedTag = 'p') => {
     if (node.nodeType === Node.TEXT_NODE) { if (currentTag !== inheritedTag && cleanText(buffer)) flush(); currentTag = inheritedTag; buffer += node.nodeValue || ''; return; }
@@ -36,8 +45,14 @@ export function extractSelectedContent() {
     if (ignored.has(node.tagName)) return;
     if (node.tagName === 'BR') { buffer += '\n'; return; }
     if (node.tagName === 'IMG') {
-      flush();
       const candidate = node.currentSrc || node.getAttribute('src') || node.getAttribute('data-src') || node.getAttribute('data-original') || '';
+      const emojiText = semanticEmojiText(node, candidate);
+      if (emojiText) {
+        try { imageMeasurements.get(new URL(candidate, document.baseURI).href)?.shift(); } catch {}
+        buffer += emojiText;
+        return;
+      }
+      flush();
       if (!candidate) return;
       let sourceUrl; try { sourceUrl = new URL(candidate, document.baseURI).href; } catch { return; }
       const measured = imageMeasurements.get(sourceUrl)?.shift();
