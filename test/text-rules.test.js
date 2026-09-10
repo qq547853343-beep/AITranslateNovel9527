@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { matchRules, resolveRuleConflicts, validateTranslation } from '../lib/rules.js';
-import { protectPlaceholders, restorePlaceholders, segmentDocumentBlocks, splitTextSmart } from '../lib/text-processing.js';
+import { compressExpressiveRuns, findTranslationShapeIssue, protectPlaceholders, restorePlaceholders, segmentDocumentBlocks, splitTextSmart } from '../lib/text-processing.js';
 
 test('smart segmentation keeps all source text', () => {
   const source = `${'第一句。'.repeat(30)}\n\n${'第二句！'.repeat(30)}`;
@@ -16,6 +16,24 @@ test('placeholder protection restores exact values', () => {
   const protectedValue = protectPlaceholders(source);
   assert.notEqual(protectedValue.text, source);
   assert.deepEqual(restorePlaceholders(protectedValue.text, protectedValue.values), { text: source, issues: [] });
+});
+
+test('expressive run compression handles real failed segments without changing ordinary text', () => {
+  const samples = [
+    'ドルドン「な、何だとおおおおおおおおおおおおおっっ',
+    'うそっ・・・！？\nうわあああああああああああああああああああああああああああああああああああああああああああ',
+    'アン「ぴぎいいいいいいいいいいげげげぐぐぐぎぎきいいいいいいいいい',
+  ];
+  for (const source of samples) {
+    const normalized = compressExpressiveRuns(source);
+    assert.notEqual(normalized.text, source);
+    assert.ok(normalized.compressedRunCount > 0);
+    assert.ok(normalized.hints.every((hint) => hint.originalCount >= 6 && hint.retainedCount === 3));
+    assert.equal(findTranslationShapeIssue(normalized.text, '自然且有限的译文'), null);
+  }
+  assert.deepEqual(compressExpressiveRuns('普通文本啊啊啊！'), { text: '普通文本啊啊啊！', hints: [], compressedRunCount: 0 });
+  assert.equal(findTranslationShapeIssue('短文本', '啊'.repeat(13)).type, 'excessive-character-run');
+  assert.equal(findTranslationShapeIssue('短文本', '正常译文'), null);
 });
 
 test('rule matching, conflicts and validation are deterministic', () => {

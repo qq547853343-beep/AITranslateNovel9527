@@ -62,3 +62,80 @@ test('completed segments remain available when a later segment fails', async () 
   assert.equal(failed.resultBlocks[1].text, '');
   database.close();
 });
+
+test('translation retries malformed structured responses with persisted attempt metadata', async () => {
+  const database = openDatabase(':memory:');
+  const ruleSets = new RuleSetRepository(database); const jobs = new TranslationJobRepository(database);
+  const retryAttempts = [];
+  const client = {
+    translateSegment: async ({ segment, retryAttempt }) => {
+      retryAttempts.push(retryAttempt);
+      if (retryAttempt < 1) throw Object.assign(new Error('AI JSON 无效'), { code: 'AI_RESPONSE_INVALID', retryable: true });
+      return { translation: `译：${segment.text}`, notes: [], decisionSummary: [], uncertainties: [] };
+    },
+  };
+  const service = new TranslationService({ jobRepository: jobs, ruleSetRepository: ruleSets, clientFactory: async () => client });
+  const prepared = service.prepare({ title: '自动重试', blocks: [{ kind: 'text', tag: 'p', text: '短文本' }], targetLanguage: '中文' });
+  await service.run(prepared.id);
+  const completed = jobs.getById(prepared.id);
+  assert.equal(completed.status, 'completed');
+  assert.deepEqual(retryAttempts, [0, 1]);
+  assert.equal(completed.segments[0].attempts, 2);
+  assert.equal(completed.segments[0].status, 'completed');
+  database.close();
+});
+
+test('translation stops after one automatic structured-response retry', async () => {
+  const database = openDatabase(':memory:');
+  const ruleSets = new RuleSetRepository(database); const jobs = new TranslationJobRepository(database);
+  let calls = 0;
+  const client = { translateSegment: async () => { calls += 1; throw Object.assign(new Error('JSON 被截断'), { code: 'AI_RESPONSE_TRUNCATED', retryable: true }); } };
+  const service = new TranslationService({ jobRepository: jobs, ruleSetRepository: ruleSets, clientFactory: async () => client });
+  const prepared = service.prepare({ title: '有限重试', blocks: [{ kind: 'text', tag: 'p', text: '短文本' }], targetLanguage: '中文' });
+  await service.run(prepared.id);
+  const failed = jobs.getById(prepared.id);
+  assert.equal(failed.status, 'failed');
+  assert.equal(calls, 2);
+  assert.equal(failed.segments[0].attempts, 2);
+  assert.match(failed.lastError, /已自动重试 1 次/);
+  database.close();
+});
+
+test('translation sends compressed expressive runs while preserving the stored source', async () => {
+  const database = openDatabase(':memory:');
+  const ruleSets = new RuleSetRepository(database); const jobs = new TranslationJobRepository(database);
+  const source = 'アン「ぴぎいいいいいいいいいいげげげぐぐぐぎぎきいいいいいいいいい';
+  let providerSegment;
+  const client = { translateSegment: async ({ segment }) => { providerSegment = segment; return { translation: '安：“咿呀啊啊——！”', notes: [], decisionSummary: [], uncertainties: [] }; } };
+  const service = new TranslationService({ jobRepository: jobs, ruleSetRepository: ruleSets, clientFactory: async () => client });
+  const prepared = service.prepare({ title: '语气词压缩', blocks: [{ kind: 'text', tag: 'p', text: source }], targetLanguage: '中文' });
+  await service.run(prepared.id);
+  const completed = jobs.getById(prepared.id);
+  assert.equal(completed.status, 'completed');
+  assert.equal(completed.sourceBlocks[0].text, source);
+  assert.notEqual(providerSegment.text, source);
+  assert.ok(providerSegment.repetitionHints.length > 0);
+  assert.equal(completed.resultBlocks[0].text, '安：“咿呀啊啊——！”');
+  database.close();
+});
+
+test('translation rejects a parsed but repetitive result and retries only once', async () => {
+  const database = openDatabase(':memory:');
+  const ruleSets = new RuleSetRepository(database); const jobs = new TranslationJobRepository(database);
+  let calls = 0;
+  const client = {
+    translateSegment: async () => {
+      calls += 1;
+      return { translation: calls === 1 ? '啊'.repeat(13) : '啊啊啊——！', notes: [], decisionSummary: [], uncertainties: [] };
+    },
+  };
+  const service = new TranslationService({ jobRepository: jobs, ruleSetRepository: ruleSets, clientFactory: async () => client });
+  const prepared = service.prepare({ title: '返回重复校验', blocks: [{ kind: 'text', tag: 'p', text: 'あああああああああああああ' }], targetLanguage: '中文' });
+  await service.run(prepared.id);
+  const completed = jobs.getById(prepared.id);
+  assert.equal(completed.status, 'completed');
+  assert.equal(completed.segments[0].attempts, 2);
+  assert.equal(completed.resultBlocks[0].text, '啊啊啊——！');
+  assert.equal(calls, 2);
+  database.close();
+});
