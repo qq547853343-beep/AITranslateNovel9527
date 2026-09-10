@@ -28,6 +28,17 @@
           <span>{{sourceCharacters}} 字符</span><span>{{sourceWords}} 字词</span><span>预计 {{estimatedSegments}} 段</span><span>{{sourceImages}} 张图片</span><span>模型 deepseek-chat</span><span>{{activeRuleSetIds.length}} 个规则集</span>
         </div>
 
+        <section class="usage-panel" aria-label="DeepSeek 余额与用量">
+          <div class="usage-balance">
+            <div><strong>DeepSeek 余额</strong><small>{{balanceUpdatedAt?'更新于 '+formatTime(balanceUpdatedAt):'尚未查询'}}</small></div>
+            <div v-if="balance?.balanceInfos?.length" class="balance-values"><span v-for="item in balance.balanceInfos" :key="item.currency">{{item.currency}} {{item.totalBalance}}</span></div>
+            <span v-else-if="balanceError" class="balance-error">{{balanceError}}</span><span v-else class="muted-value">{{keyConfigured?'等待查询':'配置 API Key 后可查询'}}</span>
+            <div class="usage-actions"><button type="button" @click="refreshBalance" :disabled="balanceLoading||!keyConfigured">{{balanceLoading?'刷新中…':'刷新余额'}}</button><button type="button" @click="openDeepSeekPlatform">DeepSeek 平台 ↗</button></div>
+          </div>
+          <div class="usage-metrics"><div><small>当前任务</small><strong>{{formatTokens(taskUsage.totalTokens)}} Token</strong><span>{{taskUsage.requestCount||0}} 次请求 · 估算 {{formatUsd(taskUsage.estimatedCostUsd)}}</span></div><div><small>本次服务会话</small><strong>{{formatTokens(sessionUsage?.usage?.totalTokens)}} Token</strong><span>{{sessionUsage?.usage?.requestCount||0}} 次请求 · 估算 {{formatUsd(sessionUsage?.usage?.estimatedCostUsd)}}</span></div></div>
+          <p>费用为按官方公开单价计算的本地估算，最终以 DeepSeek 账单为准；余额查询失败不会中断翻译。</p>
+        </section>
+
         <div class="editor-block">
           <div class="editor-title"><h3>原文与图片</h3><div class="editor-title-actions"><small>支持粘贴图文及拖入 PNG/JPEG/GIF/WebP</small><button class="clipboard-button" type="button" @click="readClipboardHtml" :disabled="readingClipboard||isWorking">{{readingClipboard?'正在读取…':'读取剪贴板网页'}}</button></div></div>
           <div ref="sourceEditor" class="rich-editor" contenteditable="true" data-placeholder="输入文字，或把包含图片的内容粘贴到这里……" @input="updateSourceStats" @paste="onPaste" @dragover.prevent="dragging=true" @dragleave="dragging=false" @drop="onDrop" :class="{dragging}"></div>
@@ -40,14 +51,23 @@
 
         <div v-if="jobId" class="progress-panel" :class="jobStatus">
           <div class="ring" :style="{'--progress':progressDegrees+'deg'}"><div><strong>{{progressPercent}}%</strong><span>{{progressLabel}}</span></div></div>
-          <div class="segment-status"><h3>当前翻译第 {{currentSegment||0}} / {{totalSegments||0}} 段</h3><p>{{currentSegmentText||'正在准备分段和规则……'}}</p><div class="segment-meta"><span>当前 {{currentSegmentCharacters}} 字符</span><span>完成 {{completedSegments}}</span><span>失败 {{failedSegments}}</span><span>剩余 {{remainingSegments}}</span></div></div>
+          <div class="segment-status"><h3>当前翻译第 {{currentSegment||0}} / {{totalSegments||0}} 段 <em>{{currentSegmentStatus||progressLabel}}</em></h3><p>{{currentSegmentText||'正在准备分段和规则……'}}</p><div class="segment-meta"><span>当前 {{currentSegmentCharacters}} 字符</span><span>完成 {{completedSegments}}</span><span>失败 {{failedSegments}}</span><span>剩余 {{remainingSegments}}</span></div><div class="segment-strip"><span v-for="segment in recentSegments" :key="segment.id" :class="segment.status">第 {{segment.index}} 段 · {{segment.status}}<b v-if="segment.attempts>1">×{{segment.attempts}}</b></span></div></div>
         </div>
+
+        <div v-if="failedSegmentDetails.length" class="failed-segments"><strong>失败分段</strong><article v-for="segment in failedSegmentDetails" :key="segment.id"><div><b>第 {{segment.index}} 段 · 已尝试 {{segment.attempts}} 次</b><span>{{segment.lastError}}</span><small>{{segment.sourceText}}</small></div><div><button type="button" @click="locateFailedSegment(segment)">定位</button><button type="button" @click="retryFailedSegment(segment)" :disabled="isWorking">重试此段</button></div></article></div>
 
         <div v-if="validationIssues.length" class="warning-box"><strong>术语校验：{{validationIssues.length}} 项警告</strong><ul><li v-for="(issue,index) in validationIssues.slice(0,8)" :key="index">{{issueText(issue)}}</li></ul></div>
 
         <div class="editor-block">
-          <div class="editor-title"><h3>翻译结果</h3><small>{{translatedCharacters}} 字符 · {{translatedImages}} 张图片</small></div>
-          <div class="rich-output" :class="{placeholder:!translatedBlocks.length}" v-html="translatedBlocks.length?translatedHtml:'翻译完成后，图文结果将显示在这里。'"></div>
+          <div class="editor-title"><h3>翻译结果</h3><div class="output-title-actions"><small>{{translatedCharacters}} 字符 · {{translatedImages}} 张图片</small><label>最大高度 <select v-model.number="outputMaxHeight" @change="saveOutputMaxHeight"><option :value="480">480 px</option><option :value="640">640 px</option><option :value="800">800 px</option><option :value="1200">1200 px</option></select></label><button type="button" @click="scrollTranslationTop" :disabled="!hasTranslationOutput">回到顶部</button><button type="button" @click="returnToCurrent" :disabled="!hasTranslationOutput">回到当前</button></div></div>
+          <div class="translation-output-shell">
+            <div ref="translationOutput" class="rich-output translation-scroll" :class="{placeholder:!hasTranslationOutput}" :style="{maxHeight:outputMaxHeight+'px'}" @scroll="onTranslationScroll">
+              <div v-if="translatedBlocks.length" v-html="translatedHtml"></div>
+              <section v-if="liveTranslation" class="live-segment"><small>第 {{liveSegment||currentSegment}} 段 · {{liveSegmentStatus==='retrying'?'正在重试':'实时生成中'}}</small><div>{{liveTranslation}}</div><i></i></section>
+              <span v-if="!hasTranslationOutput">翻译完成后，图文结果将显示在这里。</span>
+            </div>
+            <button v-if="showReturnCurrent" type="button" class="return-current" @click="returnToCurrent">有新译文 · 回到当前</button>
+          </div>
         </div>
 
         <div class="result-actions"><button class="btn soft" @click="copyTranslation" :disabled="!translatedBlocks.length">复制译文</button><button class="btn soft" @click="exportDocument('txt')" :disabled="!translatedBlocks.length">导出 TXT</button><button class="btn docx" @click="exportDocument('docx')" :disabled="!translatedBlocks.length||exporting">导出 Word</button><button class="btn epub" @click="exportDocument('epub')" :disabled="!translatedBlocks.length||exporting">导出 EPUB</button><button class="btn primary" @click="bundleOpen=true" :disabled="!translatedBlocks.length||exporting">输出资料</button></div>

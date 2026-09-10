@@ -20,6 +20,9 @@
 - 新增 Chrome/Edge 网页选区导出扩展：保持文字与图片顺序及实际显示尺寸，按真实格式原样保存 PNG/JPEG/GIF/WebP；安全 SVG 保留原件并附带 PNG 预览，生成的标准 ZIP 可直接导入本服务。
 - SQLite 迁移拆分为不可变、带名称和 SHA-256 校验和的递增迁移；翻译任务增加 revision、worker 租约、心跳和迟到写回保护。
 - DeepSeek 调用拆分为 Provider、提示词构造、响应解析和错误映射；旧 `/api/translate` 通过兼容用例进入 Provider，不再由路由直接请求 AI。
+- 长文本翻译使用 DeepSeek SSE 流式响应，当前分段实时显示；译文区可拖动调整高度、限制最大高度、暂停自动跟随，并支持回到顶部、回到当前、失败段定位和单段重试。
+- 新增 DeepSeek 余额与 Token 用量面板：余额由本地后端查询，任务用量写入现有任务元数据，会话用量保存在服务进程内存；余额查询失败不会阻止翻译。
+- 提升主界面、规则栏、状态区和弹窗的基础字号与点击区域；说明文字支持悬停高亮，并补充键盘焦点、滚动条及移动端顶部布局优化。
 
 ### ver0.1
 
@@ -78,7 +81,7 @@ pnpm extension:pack
 2. 新建或选择一个或多个独立规则集。
 3. 在右侧输入自然语言规则并点击“解析规则”。AI 只生成候选操作；检查预览并点击“确认保存”后才写入规则集。
 4. 在左侧输入原文、读取剪贴板网页、导入普通文本文件或标准化网页 ZIP，然后开始翻译。
-5. 完成后复制译文，导出 TXT、Word、EPUB，或把译文与术语表、原文、说明、分析和规则输出到同一文件夹。
+5. 翻译时可实时查看当前分段、Token 用量和估算费用；完成后复制译文，导出 TXT、Word、EPUB，或把译文与术语表、原文、说明、分析和规则输出到同一文件夹。
 
 ## 本地数据与密钥
 
@@ -97,4 +100,4 @@ pnpm extension:pack
 pnpm test
 ```
 
-当前自动化基线为 81 项测试。标准网页包格式见 [WEB_CONTENT_ZIP_FORMAT.md](WEB_CONTENT_ZIP_FORMAT.md)，详细设计见 [PROJECT_DOCUMENT.md](PROJECT_DOCUMENT.md)，Electron 启动器需求与实现状态见 [ELECTRON_LAUNCHER_REQUIREMENTS.md](ELECTRON_LAUNCHER_REQUIREMENTS.md)。
+当前自动化基线为 94 项测试。标准网页包格式见 [WEB_CONTENT_ZIP_FORMAT.md](WEB_CONTENT_ZIP_FORMAT.md)，详细设计见 [PROJECT_DOCUMENT.md](PROJECT_DOCUMENT.md)，Electron 启动器需求与实现状态见 [ELECTRON_LAUNCHER_REQUIREMENTS.md](ELECTRON_LAUNCHER_REQUIREMENTS.md)。

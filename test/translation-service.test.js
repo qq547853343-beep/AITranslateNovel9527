@@ -139,3 +139,29 @@ test('translation rejects a parsed but repetitive result and retries only once',
   assert.equal(calls, 2);
   database.close();
 });
+
+test('translation publishes in-memory partial text, accounts failed calls and retries one failed segment', async () => {
+  const database = openDatabase(':memory:');
+  const ruleSets = new RuleSetRepository(database); const jobs = new TranslationJobRepository(database);
+  let calls = 0; const partials = [];
+  const client = {
+    model: 'deepseek-chat',
+    translateSegment: async ({ segment, onProgress }) => {
+      calls += 1; onProgress?.({ translation: calls === 1 ? '未完成' : '完成译文', complete: false });
+      if (calls === 1) throw Object.assign(new Error('模拟提供商中断'), { usage: { promptTokens: 10, completionTokens: 2, totalTokens: 12, requestCount: 1 } });
+      return { translation: `译：${segment.text}`, notes: [], decisionSummary: [], uncertainties: [], usage: { promptTokens: 9, completionTokens: 3, totalTokens: 12, requestCount: 1 }, providerModel: 'deepseek-chat' };
+    },
+  };
+  const service = new TranslationService({ jobRepository: jobs, ruleSetRepository: ruleSets, clientFactory: async () => client });
+  const prepared = service.prepare({ title: '单段重试', blocks: [{ kind: 'text', tag: 'p', text: '原文' }], targetLanguage: '中文' });
+  const unsubscribe = service.subscribe(prepared.id, ({ event, payload }) => { if (event === 'partial') partials.push(payload); });
+  await service.run(prepared.id);
+  let failed = jobs.getById(prepared.id); const publicFailed = service.publicJob(failed);
+  assert.equal(failed.status, 'failed'); assert.equal(publicFailed.failedSegmentDetails.length, 1); assert.equal(publicFailed.failedSegmentDetails[0].sourceText, '原文');
+  assert.equal(failed.meta.usage.totalTokens, 12); assert.ok(partials.some((item) => item.translation === '未完成'));
+  service.retrySegment(prepared.id, failed.segments[0].id);
+  for (let count = 0; count < 50; count += 1) { failed = jobs.getById(prepared.id); if (failed.status === 'completed') break; await new Promise((resolve) => setTimeout(resolve, 5)); }
+  unsubscribe();
+  assert.equal(failed.status, 'completed'); assert.equal(failed.resultBlocks[0].text, '译：原文'); assert.equal(failed.meta.usage.totalTokens, 24); assert.equal(failed.meta.usage.requestCount, 2);
+  database.close();
+});

@@ -10,13 +10,14 @@ import { MemorySecretStore } from '../lib/secret-store.js';
 
 test('HTTP API supports rules and recoverable translation jobs', async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'translateword-test-'));
-  const fakeFetch = async (_url, options) => {
+  const fakeFetch = async (url, options) => {
+    if (url.endsWith('/user/balance')) return { ok: true, status: 200, json: async () => ({ is_available: true, balance_infos: [{ currency: 'CNY', total_balance: '8.88', granted_balance: '0.00', topped_up_balance: '8.88' }] }) };
     const request = JSON.parse(options.body); const userContent = request.messages.at(-1).content;
     let user; try { user = JSON.parse(userContent); } catch { user = null; }
     const content = !user ? `兼容译文：${userContent}` : user.segment
       ? { id: user.segment.id, translation: user.segment.text.replaceAll('聖女', '圣女'), notes: [], decisionSummary: [], uncertainties: [] }
       : { operations: [{ action: 'add', type: 'term', source: '王都', target: '王都', aliases: [], forbidden: [], category: '地名', sendMode: 'matched' }] };
-    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: typeof content === 'string' ? content : JSON.stringify(content) } }] }) };
+    return { ok: true, status: 200, json: async () => ({ model: 'deepseek-chat', choices: [{ message: { content: typeof content === 'string' ? content : JSON.stringify(content) } }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } }) };
   };
   const runtime = await createApplication({ baseDirectory: directory, databaseFile: ':memory:', fetchImpl: fakeFetch, secretStore: new MemorySecretStore() });
   const server = runtime.app.listen(0, '127.0.0.1'); await once(server, 'listening');
@@ -25,6 +26,7 @@ test('HTTP API supports rules and recoverable translation jobs', async () => {
   try {
     let result = await request('/api/settings/api-key', { method: 'POST', body: JSON.stringify({ apiKey: 'sk-test-key-1234567890' }) });
     assert.equal(result.response.status, 200);
+    result = await request('/api/deepseek/balance'); assert.equal(result.response.status, 200); assert.equal(result.body.balanceInfos[0].totalBalance, '8.88'); assert.equal(JSON.stringify(result.body).includes('sk-test'), false);
     result = await request('/api/rule-sets', { method: 'POST', body: JSON.stringify({ name: '集成测试规则' }) });
     assert.equal(result.response.status, 201); const ruleSetId = result.body.id;
     result = await request(`/api/rule-sets/${ruleSetId}/rules`, { method: 'POST', body: JSON.stringify({ source: '聖女', target: '圣女' }) });
@@ -45,6 +47,10 @@ test('HTTP API supports rules and recoverable translation jobs', async () => {
     }
     assert.equal(result.body.status, 'completed');
     assert.equal(result.body.resultBlocks[0].text, '圣女来了。');
+    const eventController = new AbortController();
+    const eventResponse = await fetch(`${origin}/api/translation-jobs/${jobId}/events`, { signal: eventController.signal });
+    assert.equal(eventResponse.status, 200); assert.match(eventResponse.headers.get('content-type'), /^text\/event-stream/);
+    const eventChunk = await eventResponse.body.getReader().read(); assert.match(new TextDecoder().decode(eventChunk.value), /event: job/); eventController.abort();
     result = await request('/api/translate-document', { method: 'POST', body: JSON.stringify({ title: '兼容接口', targetLanguage: '中文', ruleSetIds: [ruleSetId], blocks: [{ kind: 'text', tag: 'p', text: '聖女。' }] }) });
     assert.equal(result.response.status, 200);
     assert.equal(result.body.blocks[0].text, '圣女。');
@@ -52,6 +58,7 @@ test('HTTP API supports rules and recoverable translation jobs', async () => {
     assert.equal(result.response.status, 200);
     assert.equal(result.body.translation, '兼容译文：旧接口原文');
     assert.equal(result.body.filename, 'translation.txt');
+    result = await request('/api/usage/session'); assert.equal(result.response.status, 200); assert.ok(result.body.usage.totalTokens >= 45); assert.ok(result.body.usage.requestCount >= 3);
     const bundleResponse = await fetch(`${origin}/api/export/bundle`, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ title: '测试', sourceBlocks: [{ kind: 'text', tag: 'p', text: '原文' }], translatedBlocks: [{ kind: 'text', tag: 'p', text: '译文' }], targetLanguage: '中文', meta: { appliedRules: [{ source: '聖女', target: '圣女' }] }, selected: { translation: true, source: true, glossary: true, manifest: true } }) });
     assert.equal(bundleResponse.status, 200);
     const zip = await JSZip.loadAsync(await bundleResponse.arrayBuffer());

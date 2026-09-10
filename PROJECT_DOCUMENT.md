@@ -4,13 +4,13 @@
 
 - 项目版本：`ver0.2`
 - 文档性质：功能设计、实施结果与维护基线
-- 当前状态：ver0.1 翻译工作流、ver0.2 Electron Windows 启动器、标准化网页 ZIP 导入、网页选区导出扩展与渐进式模块化均已实现
+- 当前状态：ver0.1 翻译工作流、ver0.2 Electron Windows 启动器、标准化网页 ZIP 导入、网页选区导出扩展、渐进式模块化、流式译文与 DeepSeek 用量面板均已实现
 - 运行方式：Windows Electron 桌面启动器；同时保留 Node.js 开发入口
 - 启动器管理地址：`http://127.0.0.1:7000`
 - 翻译服务默认地址：`http://127.0.0.1:6501`
 - AI 服务：DeepSeek Chat API
 
-本文档第 1 至 24 节记录 ver0.1 翻译业务设计，第 25 节记录 ver0.2 Electron 启动器，第 26 至 28 节记录标准化网页 ZIP 导入、模块边界和任务并发增强，第 29 节记录网页选区导出扩展。ver0.2 保持增量演进，不把大型文档 Worker Pool 当作已实现功能。
+本文档第 1 至 24 节记录 ver0.1 翻译业务设计，第 25 节记录 ver0.2 Electron 启动器，第 26 至 28 节记录标准化网页 ZIP 导入、模块边界和任务并发增强，第 29 节记录网页选区导出扩展，第 30 节记录流式译文与 DeepSeek 用量。ver0.2 保持增量演进，不把大型文档 Worker Pool 当作已实现功能。
 
 ## 1. 项目目标
 
@@ -947,7 +947,7 @@ BrowserWindow 启用 `contextIsolation`、禁用渲染进程 Node.js、启用沙
 
 ### 25.7 ver0.2 验证基线
 
-- Node.js 测试共 81 项，覆盖既有翻译业务、启动器、迁移、AI adapter、规则候选规范化、并发保护、剪贴板网页、ZIP 导入、SVG 隔离、浏览器注入函数自包含性与扩展原格式图片及容量边界。
+- Node.js 测试共 94 项，覆盖既有翻译业务、启动器、迁移、AI adapter、SSE 流式解析、Token 用量、规则候选规范化、并发保护、剪贴板网页、ZIP 导入、SVG 隔离、浏览器注入函数自包含性与扩展原格式图片及容量边界。
 - 覆盖设置持久化、操作锁、全局锁、端口检测、日志脱敏与轮转、服务生命周期、端口切换回滚、异常重启上限和健康身份校验。
 - Windows 解包版已实际启动 `server.js` 子进程并取得带实例 ID 的健康响应。
 - 使用不同用户数据目录重复启动时，第二个启动进程退出，进程数量不增加。
@@ -975,6 +975,7 @@ multipart 字段：package
 
 ```text
 server.js / lib/application.js  组合依赖与 HTTP 映射
+lib/api/                       余额和任务事件等 HTTP 路由适配器
 lib/application/               翻译兼容、规则候选、ZIP 导入用例
 lib/domain/                    Document、ZIP 合同和任务状态机
 lib/infrastructure/            ZIP、资源暂存、图片识别和导出器
@@ -1006,3 +1007,20 @@ DeepSeek 是 `TranslationProvider` / `RuleProposalProvider` 的具体实现。�
 自然语言规则候选在 Application 层统一规范化：风格、背景和格式说明会归入 `target` 并默认始终发送；只提供禁止词列表的禁止译法规则允许空 `target`；AI 更新操作中的空占位字段不会清除现有必要字段。每条候选包含保存前校验状态，前端会标出无效项并禁止确认，服务端再次校验以防绕过界面。
 
 出于主动内容与隐私边界，扩展不保留 SVG、CSS 背景图、视频、`blob:` URL 或要求登录态/防盗链的图片。WebP 可在应用内显示及导出 EPUB，但当前 DOCX 依赖不支持 WebP，导出 Word 前需转换为 PNG/JPEG。
+
+## 30. 流式译文、余额与 Token 用量
+
+长文本翻译的 DeepSeek 适配器使用 SSE，并通过 `stream_options.include_usage` 获取最后一个响应块中的官方用量。基础设施层负责 SSE 解码与结构化 JSON 增量提取；`TranslationService` 只接收 Provider 的译文增量和最终结果。当前分段的未完成译文只存于服务内存并经本机 SSE 接口推送，不逐 Token 写 SQLite；分段通过占位符、术语和形态校验后仍按原事务边界写入最终结果。
+
+```text
+GET  /api/translation-jobs/:id/events
+POST /api/translation-jobs/:id/segments/:segmentId/retry
+GET  /api/deepseek/balance
+GET  /api/usage/session
+```
+
+页面保留轮询作为 SSE 断线兜底。译文区允许纵向拖动并设置最大高度，内容超出后内部滚动；用户离开底部时停止自动跟随并显示“回到当前”。失败段公开稳定的段号、源块位置、尝试次数与错误，可定位并单独重置为 `pending`；有效 worker 存在时仍拒绝并发重试，旧 worker 的迟到返回继续受 workerId、revision 和状态校验保护。
+
+`/api/deepseek/balance` 由本地后端携带解密后的 API Key 请求官方 `/user/balance`，前端只获得余额值和更新时间，永远不获得密钥。翻译进行中每 60 秒刷新余额，结束后立即刷新；查询失败只影响余额卡片。任务 Token 累计和估算费用保存于既有 `translation_jobs.meta_json`，服务会话累计仅保存在当前进程内存，因此没有新增表、字段或数据库迁移。估算费用按代码中标注日期的公开单价计算，最终以 DeepSeek 账单为准。
+
+主界面可读性保持为纯前端关注点：正文和输入区使用更大的基础字号，主要按钮维持至少约 42px 的点击高度，状态、说明和规则元数据不再使用过小字号。说明文字在鼠标悬停时提高亮度并增加轻微辉光，键盘操作提供清晰焦点轮廓。390px 移动端采用独立的标题栏宽度分配，放大字号后仍不产生横向滚动；这些变化不修改 API、SQLite 或任务状态。
