@@ -183,7 +183,7 @@ createApp({
       if (this.bundleOptions.notes) files['translation-notes.md'] = list('翻译说明', meta.notes);
       if (this.bundleOptions.analysis) files['analysis-summary.md'] = `${list('翻译决策摘要', meta.decisionSummary)}\n\n${list('不确定项', meta.uncertainties)}`;
       if (this.bundleOptions.rules) files['applied-rules.json'] = JSON.stringify(meta.appliedRules || [], null, 2);
-      if (this.bundleOptions.manifest) files['manifest.json'] = JSON.stringify({ version:'ver0.2', title:this.documentTitle || 'translation', model:'deepseek-chat', targetLanguage:this.targetLanguage, ruleSets:meta.ruleSets || [], sourceCharacters:source.length, translatedCharacters:translation.length, exportedAt:new Date().toISOString() }, null, 2);
+      if (this.bundleOptions.manifest) files['manifest.json'] = JSON.stringify({ version:'ver0.3', title:this.documentTitle || 'translation', model:'deepseek-chat', targetLanguage:this.targetLanguage, ruleSets:meta.ruleSets || [], sourceCharacters:source.length, translatedCharacters:translation.length, exportedAt:new Date().toISOString() }, null, 2);
       return files;
     },
     async writeBundleDirectory(files) {

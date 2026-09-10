@@ -7,7 +7,7 @@ const imageLimit = 20 * 1024 * 1024;
 const blockLimit = 5_000;
 const imageCountLimit = 2_000;
 
-export async function buildWebContentPackage(selection, { fetchImpl = fetch, now = () => new Date(), extensionVersion = '0.2.0', onProgress = () => {}, rasterizeSvg = rasterizeSvgToPng } = {}) {
+export async function buildWebContentPackage(selection, { fetchImpl = fetch, now = () => new Date(), extensionVersion = '0.3.0', onProgress = () => {}, rasterizeSvg = rasterizeSvgToPng } = {}) {
   validateSelection(selection);
   const imageBlocks = selection.blocks.filter((block) => block.kind === 'image');
   const sources = [...new Set(imageBlocks.map((block) => block.sourceUrl))];

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AITranslateNovel9527 网页选区导出",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "把当前网页选中的文字和图片保存为 AITranslateNovel9527 标准网页 ZIP。",
   "permissions": ["activeTab", "scripting", "downloads"],
   "host_permissions": ["http://*/*", "https://*/*"],

@@ -194,7 +194,7 @@ function registerIpc() {
   handle('launcher:scan-ports', ({ start, end } = {}) => controller.scanPorts(start, end));
   handle('launcher:get-logs', ({ kind, lines } = {}) => ({ lines: logger.readRecent(kind, lines), kind: kind || 'all' }));
   handle('launcher:open-service', openService);
-  handle('launcher:check-update', () => ({ status: 'placeholder', supported: false, checkedAt: new Date().toISOString(), message: 'ver0.2 仅预留自动更新接口，不执行下载、安装、替换或回滚。' }));
+  handle('launcher:check-update', () => ({ status: 'placeholder', supported: false, checkedAt: new Date().toISOString(), message: 'ver0.3 仅预留自动更新接口，不执行下载、安装、替换或回滚。' }));
 }
 
 function assertTrustedRenderer(event) {

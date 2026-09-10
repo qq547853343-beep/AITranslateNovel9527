@@ -53,7 +53,7 @@ export async function startServer({
     process.off('SIGTERM', onSigterm);
     process.off('SIGINT', onSigint);
   });
-  console.log(`AITranslateNovel9527 ver0.2 running at http://${host}:${port}`);
+  console.log(`AITranslateNovel9527 ver0.3 running at http://${host}:${port}`);
   return { ...runtime, server, port, host, shutdown };
 }
 

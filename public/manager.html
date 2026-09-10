@@ -11,7 +11,7 @@
 <body>
 <div id="launcher" class="shell" v-cloak>
   <aside class="sidebar">
-    <div class="brand"><span class="brand-icon">译</span><div><b>AITranslate</b><small>Novel9527 · ver0.2</small></div></div>
+    <div class="brand"><span class="brand-icon">译</span><div><b>AITranslate</b><small>Novel9527 · ver0.3</small></div></div>
     <nav>
       <button :class="{active:view==='overview'}" @click="view='overview'">服务概览</button>
       <button :class="{active:view==='logs'}" @click="view='logs';refreshLogs()">运行日志</button>
@@ -81,7 +81,7 @@
         <label class="setting-row"><span><b>启动时隐藏</b><small>默认隐藏到系统托盘，关闭窗口不会退出</small></span><input type="checkbox" :checked="snapshot.settings?.startHidden" @change="changeSetting('startHidden',$event.target.checked)"></label>
         <label class="setting-row"><span><b>服务异常后自动重启</b><small>默认关闭；开启后连续最多重试 3 次</small></span><input type="checkbox" :checked="snapshot.settings?.autoRestartService" @change="changeSetting('autoRestartService',$event.target.checked)"></label>
       </section>
-      <section class="card update-card"><div class="card-head"><div><h2>自动更新</h2><p>ver0.2 状态接口占位</p></div></div><div class="update-body"><strong>{{updateStatus.message||snapshot.update?.message}}</strong><p>本期不会下载、安装、替换或回滚任何程序。</p><button class="button secondary" @click="checkUpdate">检查接口状态</button></div></section>
+      <section class="card update-card"><div class="card-head"><div><h2>自动更新</h2><p>ver0.3 状态接口占位</p></div></div><div class="update-body"><strong>{{updateStatus.message||snapshot.update?.message}}</strong><p>本期不会下载、安装、替换或回滚任何程序。</p><button class="button secondary" @click="checkUpdate">检查接口状态</button></div></section>
     </section>
   </main>
 </div>

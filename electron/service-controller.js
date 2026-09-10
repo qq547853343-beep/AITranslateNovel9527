@@ -213,7 +213,7 @@ export class ServiceController extends EventEmitter {
       lastExit: this.lastExit,
       restartAttempts: this.restartAttempts,
       settings: this.settings,
-      update: { status: 'placeholder', supported: false, message: '自动更新接口已预留；ver0.2 不会下载、安装、替换或回滚程序。' }
+      update: { status: 'placeholder', supported: false, message: '自动更新接口已预留；ver0.3 不会下载、安装、替换或回滚程序。' }
     };
   }
 
