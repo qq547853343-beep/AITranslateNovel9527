@@ -947,7 +947,7 @@ BrowserWindow 启用 `contextIsolation`、禁用渲染进程 Node.js、启用沙
 
 ### 25.7 ver0.2 验证基线
 
-- Node.js 测试共 64 项，覆盖既有翻译业务、启动器、迁移、AI adapter、并发保护、剪贴板网页、ZIP 导入和浏览器扩展原格式图片打包。
+- Node.js 测试共 81 项，覆盖既有翻译业务、启动器、迁移、AI adapter、规则候选规范化、并发保护、剪贴板网页、ZIP 导入、SVG 隔离、浏览器注入函数自包含性与扩展原格式图片及容量边界。
 - 覆盖设置持久化、操作锁、全局锁、端口检测、日志脱敏与轮转、服务生命周期、端口切换回滚、异常重启上限和健康身份校验。
 - Windows 解包版已实际启动 `server.js` 子进程并取得带实例 ID 的健康响应。
 - 使用不同用户数据目录重复启动时，第二个启动进程退出，进程数量不增加。
@@ -956,7 +956,7 @@ BrowserWindow 启用 `contextIsolation`、禁用渲染进程 Node.js、启用沙
 
 ## 26. 标准化网页 ZIP 导入
 
-标准包固定包含 `manifest.json`、`document.json`、`content.html` 与 `assets/`。`document.json` 是唯一规范内容来源；`content.html` 只验证存在与大小，不进入 DOM，也不能覆盖规范内容。当前允许 PNG/JPEG/GIF/WebP，按魔数验证并保持原字节；SVG 明确拒绝。
+标准包固定包含 `manifest.json`、`document.json`、`content.html` 与 `assets/`。`document.json` 是唯一规范内容来源；`content.html` 只验证存在与大小，不进入 DOM，也不能覆盖规范内容。PNG/JPEG/GIF/WebP 按魔数验证并保持原字节。安全 SVG 保持原始字节，同时必须附带 PNG 预览；导入后 SVG 隔离到 `data/original-assets/`，普通页面和导出只使用 `data/assets/` 中的 PNG 预览。
 
 导入由 `WebPackageReader → ImportWebPackage → StagedAssetStore` 完成：先限制压缩包、文件数量、单文件、展开总量和压缩比，再校验安全路径、manifest、内容块与资源引用；所有资源先写入会话临时目录，完整文档模型校验通过后再提交。任何错误都会删除临时文件和本次已提交文件。
 
@@ -999,8 +999,10 @@ DeepSeek 是 `TranslationProvider` / `RuleProposalProvider` 的具体实现。�
 
 `browser-extension/` 是独立的 Manifest V3 扩展，不在渲染进程中引入 Node.js，也不向网页暴露任意命令能力。用户点击扩展后，它仅对当前 HTTP/HTTPS 标签页临时注入选区读取函数，提取受支持的标题、段落、列表、引用与 `<img>`，按原出现顺序构造 `ContentBlock`。
 
-扩展使用跨域主机权限重新下载图片，但明确使用 `credentials: omit`，不发送 Cookie 或 Authorization。实际响应字节由魔数识别为 PNG、JPEG、GIF 或 WebP；字节不经 Canvas、不转码，以原格式写入 STORE ZIP 条目。相同 URL 只下载一次，多个图片块可复用同一资源。
+扩展使用跨域主机权限重新下载图片，但明确使用 `credentials: omit`，不发送 Cookie 或 Authorization。PNG、JPEG、GIF 和 WebP 字节不经 Canvas、不转码，以原格式写入 STORE ZIP 条目。安全 SVG 的原始字节也写入 ZIP，另通过浏览器安全图像模式生成 PNG 预览；含主动内容或外部引用的 SVG 拒绝导出。选区图片的 `getBoundingClientRect()` 尺寸被记录为 CSS 像素。相同 URL 只下载一次，多个图片块可复用同一资源。
 
-生成包严格包含 `manifest.json`、`document.json`、`content.html` 和已引用的 `assets/`。`document.json` 仍是规范来源，`content.html` 由已转义的模型重新生成。单图、总包、块数和字符数沿用导入合同上限；任一图片失败时构建整体失败，不下载半成品 ZIP。
+生成包严格包含 `manifest.json`、`document.json`、`content.html` 和已引用的 `assets/`。`document.json` 仍是规范来源，`content.html` 由已转义的模型重新生成。选区与导入合同同步限制为最多 5,000 个内容块、2,000 个唯一图片、4,004 个 ZIP 条目（含可选目录条目）、200 MB ZIP、500 MB 解压总量、单资源 8 MB 和文字 200,000 字符；SVG 原件和 PNG 预览分别计入条目与容量。任一图片失败时构建整体失败，不下载半成品 ZIP。这不引入大型文档任务队列或 Worker Pool。
+
+自然语言规则候选在 Application 层统一规范化：风格、背景和格式说明会归入 `target` 并默认始终发送；只提供禁止词列表的禁止译法规则允许空 `target`；AI 更新操作中的空占位字段不会清除现有必要字段。每条候选包含保存前校验状态，前端会标出无效项并禁止确认，服务端再次校验以防绕过界面。
 
 出于主动内容与隐私边界，扩展不保留 SVG、CSS 背景图、视频、`blob:` URL 或要求登录态/防盗链的图片。WebP 可在应用内显示及导出 EPUB，但当前 DOCX 依赖不支持 WebP，导出 Word 前需转换为 PNG/JPEG。

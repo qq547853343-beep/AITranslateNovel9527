@@ -11,12 +11,13 @@ test('translation jobs report progress and preserve blocks', async () => {
   ruleSets.addRule(set.id, { source: '聖女', target: '圣女' });
   const client = { translateSegment: async ({ segment }) => ({ translation: segment.text.replaceAll('聖女', '圣女'), notes: [], decisionSummary: [], uncertainties: [] }) };
   const service = new TranslationService({ jobRepository: jobs, ruleSetRepository: ruleSets, clientFactory: async () => client });
-  const prepared = service.prepare({ title: '测试', blocks: [{ kind: 'text', tag: 'p', text: '聖女 {name}' }, { kind: 'image', assetId: 'x.jpg' }], targetLanguage: '中文', ruleSetIds: [set.id] });
+  const prepared = service.prepare({ title: '测试', blocks: [{ kind: 'text', tag: 'p', text: '聖女 {name}' }, { kind: 'image', assetId: '123e4567-e89b-12d3-a456-426614174000.png', originalAssetId: '123e4567-e89b-12d3-a456-426614174001.svg', originalFormat: 'svg' }], targetLanguage: '中文', ruleSetIds: [set.id] });
   await service.run(prepared.id);
   const completed = jobs.getById(prepared.id);
   assert.equal(completed.status, 'completed');
   assert.equal(completed.resultBlocks[0].text, '圣女 {name}');
   assert.equal(completed.resultBlocks[1].kind, 'image');
+  assert.equal(completed.resultBlocks[1].originalAssetId, '123e4567-e89b-12d3-a456-426614174001.svg');
   assert.equal(completed.meta.validationIssues.length, 0);
   database.close();
 });

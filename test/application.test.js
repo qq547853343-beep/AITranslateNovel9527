@@ -86,6 +86,40 @@ test('health endpoint identifies the managed process and launcher shutdown requi
   }
 });
 
+test('SVG originals are download-only while PNG previews remain renderable assets', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'translate-svg-api-'));
+  const runtime = await createApplication({ baseDirectory: directory, databaseFile: ':memory:', secretStore: new MemorySecretStore() });
+  const server = runtime.app.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M0 0h24v24H0z"/></svg>');
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  try {
+    const zip = new JSZip();
+    zip.file('manifest.json', JSON.stringify({ format: 'AITranslateNovel9527.web-content', version: '1.0', createdAt: '2026-09-10T00:00:00.000Z', generator: { name: 'test', version: '1' } }));
+    zip.file('document.json', JSON.stringify({ schemaVersion: 1, title: 'SVG', blocks: [{ id: 'image', kind: 'image', assetPath: 'assets/source.svg', previewAssetPath: 'assets/source.preview.png', width: 24, height: 24 }] }));
+    zip.file('content.html', '<img src="assets/source.preview.png">');
+    zip.file('assets/source.svg', svg);
+    zip.file('assets/source.preview.png', png);
+    const body = new FormData();
+    body.append('package', new Blob([await zip.generateAsync({ type: 'uint8array' })], { type: 'application/zip' }), 'svg.zip');
+    let response = await fetch(`${origin}/api/import/web-package`, { method: 'POST', headers: { Origin: origin }, body });
+    assert.equal(response.status, 201);
+    const imported = await response.json();
+    const block = imported.document.blocks[0];
+    response = await fetch(`${origin}/api/original-assets/${block.originalAssetId}`);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-disposition'), /^attachment;/);
+    assert.match(response.headers.get('content-type'), /^application\/octet-stream/);
+    assert.equal(response.headers.get('content-security-policy'), "sandbox; default-src 'none'");
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), svg);
+    response = await fetch(`${origin}/api/assets/${block.assetId}`);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type'), /^image\/png/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve)); runtime.database.close(); fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('remote clipboard images are committed as local assets after validation', async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'translate-remote-image-'));
   const png = Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a,0x01]);

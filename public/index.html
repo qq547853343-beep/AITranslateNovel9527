@@ -61,7 +61,7 @@
           <label class="field"><span>编辑目标规则集</span><select v-model="selectedRuleSetId" @change="loadSelectedRuleSet"><option value="">请选择规则集</option><option v-for="set in activeRuleSets" :key="set.id" :value="set.id">{{set.name}}</option></select></label>
           <textarea v-model="ruleInstruction" rows="5" placeholder="例如：把“聖女”固定翻译为“圣女”，不要使用“神圣少女”。"></textarea>
           <button class="btn primary full" @click="parseRule" :disabled="parsingRule||!selectedRuleSetId||!ruleInstruction.trim()">{{parsingRule?'正在解析……':'解析规则'}}</button>
-          <div v-if="pendingOperations.length" class="preview"><h3>候选操作</h3><article v-for="(op,index) in pendingOperations" :key="index"><b>{{actionName(op.action)}} · {{op.type}}</b><span>{{op.source||'通用规则'}} → {{op.target}}</span><small>{{op.reason}}</small></article><div class="actions"><button class="btn primary" @click="applyParsedRules">确认保存</button><button class="btn ghost" @click="pendingOperations=[]">取消</button></div></div>
+          <div v-if="pendingOperations.length" class="preview"><h3>候选操作</h3><article v-for="(op,index) in pendingOperations" :key="index" :class="{invalid:op.valid===false}"><b>{{actionName(op.action)}} · {{ruleTypeLabel(op.type)}}</b><span>{{op.source||'通用规则'}} → {{op.target||'（未填写）'}}</span><small v-if="op.validationError" class="candidate-error">{{op.validationError}}</small><small v-else>{{op.reason}}</small></article><div class="actions"><button class="btn primary" @click="applyParsedRules" :disabled="!canApplyParsedRules">确认保存</button><button class="btn ghost" @click="pendingOperations=[]">取消</button></div></div>
         </div>
       </section>
 

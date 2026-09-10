@@ -1,6 +1,28 @@
 export function extractSelectedContent() {
+  const dimension = (value, fallback) => {
+    const number = Number(value);
+    return Number.isFinite(number) && number > 0 ? Math.max(1, Math.min(4000, Math.round(number))) : fallback;
+  };
+  const collectSelectedImageMeasurements = (selectionValue) => {
+    const result = new Map();
+    for (const image of document.images || []) {
+      let selected = false;
+      for (let index = 0; index < selectionValue.rangeCount && !selected; index += 1) {
+        try { selected = selectionValue.getRangeAt(index).intersectsNode(image); } catch {}
+      }
+      if (!selected) continue;
+      const candidate = image.currentSrc || image.getAttribute('src') || image.getAttribute('data-src') || image.getAttribute('data-original') || '';
+      let sourceUrl; try { sourceUrl = new URL(candidate, document.baseURI).href; } catch { continue; }
+      const rectangle = image.getBoundingClientRect();
+      const values = result.get(sourceUrl) || [];
+      values.push({ width: rectangle.width, height: rectangle.height });
+      result.set(sourceUrl, values);
+    }
+    return result;
+  };
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0 || selection.isCollapsed) throw new Error('请先在网页中选择要保存的文字或图片。');
+  const imageMeasurements = collectSelectedImageMeasurements(selection);
   const fragment = document.createDocumentFragment();
   for (let index = 0; index < selection.rangeCount; index += 1) fragment.append(selection.getRangeAt(index).cloneContents());
   const blocks = []; let buffer = ''; let currentTag = 'p';
@@ -18,7 +40,8 @@ export function extractSelectedContent() {
       const candidate = node.currentSrc || node.getAttribute('src') || node.getAttribute('data-src') || node.getAttribute('data-original') || '';
       if (!candidate) return;
       let sourceUrl; try { sourceUrl = new URL(candidate, document.baseURI).href; } catch { return; }
-      blocks.push({ id: `image-${blocks.length}`, kind: 'image', sourceUrl, alt: String(node.getAttribute('alt') || '').slice(0, 200), width: Math.max(1, Math.min(4000, Number(node.getAttribute('width')) || node.naturalWidth || 900)), height: Math.max(1, Math.min(4000, Number(node.getAttribute('height')) || node.naturalHeight || 600)) });
+      const measured = imageMeasurements.get(sourceUrl)?.shift();
+      blocks.push({ id: `image-${blocks.length}`, kind: 'image', sourceUrl, alt: String(node.getAttribute('alt') || '').slice(0, 200), width: dimension(measured?.width || node.getAttribute('width') || node.naturalWidth, 900), height: dimension(measured?.height || node.getAttribute('height') || node.naturalHeight, 600) });
       return;
     }
     const nextTag = blockTags[node.tagName] || inheritedTag;

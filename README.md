@@ -17,7 +17,7 @@
 - 自动更新仅预留接口和状态，不执行下载、安装、替换或回滚。
 - 原文编辑区可主动读取剪贴板网页 `text/html`；其中的远程 PNG/JPEG/GIF/WebP 图片经地址、重定向、大小和类型校验后转存为本地资源，不携带 Cookie 或授权信息。
 - 新增标准化网页 ZIP 导入：以 `document.json` 为唯一内容来源，安全校验 `manifest.json`、文件路径、压缩比、展开大小和图片引用，失败时清理全部临时资源。
-- 新增 Chrome/Edge 网页选区导出扩展：保持文字与图片顺序，按真实格式原样保存 PNG/JPEG/GIF/WebP，并生成可直接导入本服务的标准 ZIP。
+- 新增 Chrome/Edge 网页选区导出扩展：保持文字与图片顺序及实际显示尺寸，按真实格式原样保存 PNG/JPEG/GIF/WebP；安全 SVG 保留原件并附带 PNG 预览，生成的标准 ZIP 可直接导入本服务。
 - SQLite 迁移拆分为不可变、带名称和 SHA-256 校验和的递增迁移；翻译任务增加 revision、worker 租约、心跳和迟到写回保护。
 - DeepSeek 调用拆分为 Provider、提示词构造、响应解析和错误映射；旧 `/api/translate` 通过兼容用例进入 Provider，不再由路由直接请求 AI。
 
@@ -97,4 +97,4 @@ pnpm extension:pack
 pnpm test
 ```
 
-当前自动化基线为 64 项测试。标准网页包格式见 [WEB_CONTENT_ZIP_FORMAT.md](WEB_CONTENT_ZIP_FORMAT.md)，详细设计见 [PROJECT_DOCUMENT.md](PROJECT_DOCUMENT.md)，Electron 启动器需求与实现状态见 [ELECTRON_LAUNCHER_REQUIREMENTS.md](ELECTRON_LAUNCHER_REQUIREMENTS.md)。
+当前自动化基线为 81 项测试。标准网页包格式见 [WEB_CONTENT_ZIP_FORMAT.md](WEB_CONTENT_ZIP_FORMAT.md)，详细设计见 [PROJECT_DOCUMENT.md](PROJECT_DOCUMENT.md)，Electron 启动器需求与实现状态见 [ELECTRON_LAUNCHER_REQUIREMENTS.md](ELECTRON_LAUNCHER_REQUIREMENTS.md)。

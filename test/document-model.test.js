@@ -21,3 +21,9 @@ test('document model retains existing limits and stable validation codes', () =>
   assert.throws(() => normalizeDocumentBlocks([{ kind: 'image', assetId: '../secret.png' }]), (error) => error.code === 'DOCUMENT_IMAGE_REFERENCE_INVALID');
   assert.throws(() => normalizeDocumentBlocks([{ kind: 'text', text: 'x'.repeat(200_001) }]), (error) => error.code === 'DOCUMENT_TEXT_TOO_LARGE' && error.status === 413);
 });
+
+test('document model accepts five thousand structural blocks but not more', () => {
+  const blocks = Array.from({ length: 5_000 }, () => ({ kind: 'text', tag: 'p', text: 'x' }));
+  assert.equal(normalizeDocumentBlocks(blocks).length, 5_000);
+  assert.throws(() => normalizeDocumentBlocks([...blocks, { kind: 'text', tag: 'p', text: 'x' }]), (error) => error.code === 'DOCUMENT_BLOCK_COUNT_INVALID');
+});

@@ -4,14 +4,16 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import JSZip from 'jszip';
-import { WebPackageReader } from '../lib/infrastructure/web-package-reader.js';
+import { DEFAULT_WEB_PACKAGE_LIMITS, WebPackageReader } from '../lib/infrastructure/web-package-reader.js';
 import { StagedAssetStore } from '../lib/infrastructure/staged-asset-store.js';
 import { ImportWebPackage } from '../lib/application/import-web-package.js';
+import { validateWebPackageDocument } from '../lib/domain/web-package.js';
 
 const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
 const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0]);
 const gif = Buffer.from('GIF89a\u0001\u0000\u0001\u0000', 'binary');
 const webp = Buffer.from([0x52, 0x49, 0x46, 0x46, 0x04, 0, 0, 0, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x20]);
+const safeSvg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36"><path fill="#ffd93b" d="M0 0h36v36H0z"/></svg>');
 const manifest = { format: 'AITranslateNovel9527.web-content', version: '1.0', createdAt: '2026-09-09T00:00:00.000Z', generator: { name: 'fixed-test-generator', version: '1.0.0' } };
 
 function documentWith(blocks) { return { schemaVersion: 1, title: '固定网页包样例', language: 'zh-CN', sourceUrl: 'https://example.com/chapter/1', blocks, metadata: { fixture: true } }; }
@@ -27,9 +29,10 @@ async function buildZip({ document = documentWith([{ id: 'p1', kind: 'text', tag
 function harness() {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'translate-web-package-'));
   const assetDirectory = path.join(directory, 'assets');
+  const originalAssetDirectory = path.join(directory, 'original-assets');
   const temporaryDirectory = path.join(directory, 'tmp');
-  const importer = new ImportWebPackage({ reader: new WebPackageReader(), assetStore: new StagedAssetStore({ assetDirectory, temporaryDirectory }) });
-  return { directory, assetDirectory, temporaryDirectory, importer };
+  const importer = new ImportWebPackage({ reader: new WebPackageReader(), assetStore: new StagedAssetStore({ assetDirectory, originalAssetDirectory, temporaryDirectory }) });
+  return { directory, assetDirectory, originalAssetDirectory, temporaryDirectory, importer };
 }
 function names(directory) { return fs.existsSync(directory) ? fs.readdirSync(directory) : []; }
 
@@ -87,13 +90,14 @@ test('missing and invalid ZIP assets leave no formal or temporary files', async 
   } finally { fs.rmSync(value.directory, { recursive: true, force: true }); }
 });
 
-test('web ZIP contract rejects SVG instead of exposing active image content', async () => {
+test('web ZIP contract requires a PNG preview for SVG content', async () => {
   const archive = await buildZip({
     document: documentWith([{ id: 'svg', kind: 'image', assetPath: 'assets/active.svg' }]),
     assets: { 'assets/active.svg': '<svg onload="alert(1)"/>' },
   });
   const reader = new WebPackageReader();
-  await assert.rejects(() => reader.read(archive), (error) => ['WEB_PACKAGE_FILE_UNSUPPORTED', 'WEB_PACKAGE_IMAGE_PATH_INVALID'].includes(error.code));
+  const parsed = await reader.read(archive);
+  assert.throws(() => validateWebPackageDocument(parsed.document), (error) => error.code === 'WEB_PACKAGE_SVG_PREVIEW_REQUIRED');
 });
 
 test('web ZIP import preserves GIF and WebP bytes and original formats', async () => {
@@ -111,4 +115,46 @@ test('web ZIP import preserves GIF and WebP bytes and original formats', async (
       assert.deepEqual(bytes, asset.assetId.endsWith('.gif') ? gif : webp);
     }
   } finally { fs.rmSync(value.directory, { recursive: true, force: true }); }
+});
+
+test('web ZIP import quarantines exact SVG bytes and uses PNG as the renderable asset', async () => {
+  const value = harness();
+  try {
+    const document = documentWith([{ id: 'moon', kind: 'image', assetPath: 'assets/moon.svg', previewAssetPath: 'assets/moon.preview.png', alt: '月亮', width: 36, height: 36 }]);
+    const archive = await buildZip({ document, assets: { 'assets/moon.svg': safeSvg, 'assets/moon.preview.png': png } });
+    const result = await value.importer.execute(archive);
+    const block = result.document.blocks[0];
+    assert.match(block.assetId, /\.png$/);
+    assert.match(block.originalAssetId, /\.svg$/);
+    assert.equal(block.width, 36);
+    assert.equal(block.height, 36);
+    assert.deepEqual(fs.readFileSync(path.join(value.assetDirectory, block.assetId)), png);
+    assert.deepEqual(fs.readFileSync(path.join(value.originalAssetDirectory, block.originalAssetId)), safeSvg);
+  } finally { fs.rmSync(value.directory, { recursive: true, force: true }); }
+});
+
+test('active SVG rejection rolls back both preview and original asset directories', async () => {
+  const value = harness();
+  try {
+    const document = documentWith([{ id: 'active', kind: 'image', assetPath: 'assets/active.svg', previewAssetPath: 'assets/active.preview.png' }]);
+    const archive = await buildZip({ document, assets: { 'assets/active.svg': '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"></svg>', 'assets/active.preview.png': png } });
+    await assert.rejects(() => value.importer.execute(archive), (error) => error.code === 'WEB_PACKAGE_SVG_ACTIVE_CONTENT');
+    assert.deepEqual(names(value.assetDirectory), []);
+    assert.deepEqual(names(value.originalAssetDirectory), []);
+    assert.deepEqual(names(value.temporaryDirectory), []);
+  } finally { fs.rmSync(value.directory, { recursive: true, force: true }); }
+});
+
+test('web ZIP reader accepts more than 500 files within the expanded bounded limit', async () => {
+  const assets = Object.fromEntries(Array.from({ length: 501 }, (_unused, index) => [`assets/image-${index}.png`, png]));
+  const archive = await buildZip({ assets });
+  const result = await new WebPackageReader().read(archive);
+  assert.equal(result.assets.size, 501);
+});
+
+test('web ZIP expanded limits remain explicit and bounded', () => {
+  assert.deepEqual(
+    { archiveBytes: DEFAULT_WEB_PACKAGE_LIMITS.archiveBytes, fileCount: DEFAULT_WEB_PACKAGE_LIMITS.fileCount, expandedBytes: DEFAULT_WEB_PACKAGE_LIMITS.expandedBytes },
+    { archiveBytes: 200 * 1024 * 1024, fileCount: 4_004, expandedBytes: 500 * 1024 * 1024 },
+  );
 });

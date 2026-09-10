@@ -2,7 +2,7 @@ const encoder = new TextEncoder();
 let crcTable;
 
 export function createStoredZip(files, { date = new Date() } = {}) {
-  if (!Array.isArray(files) || !files.length || files.length > 500) throw new Error('ZIP 文件数量必须在 1 到 500 之间。');
+  if (!Array.isArray(files) || !files.length || files.length > 4_003) throw new Error('ZIP 文件数量必须在 1 到 4,003 之间。');
   const localParts = []; const centralParts = []; let offset = 0;
   const { time, day } = dosTime(date);
   for (const file of files) {
